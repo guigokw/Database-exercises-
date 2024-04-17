@@ -1,0 +1,24 @@
+import sqlite3
+
+conexão = sqlite3.connect('escola.db')
+
+cursor = conexão.cursor()
+
+cursor.execute(' CREATE TABLE alunos1 (id_aluno INTEGER, nome TEXT, idade INTEGER, curso TEXT)')
+
+cursor.execute(' CREATE TABLE notas1 (id_aluno INTEGER, disciplina TEXT, nota REAL)')
+
+conexão.commit()
+
+cursor.execute(' INSERT INTO alunos1 VALUES (1, "guilherme", 21, "ciencia da computação")')
+
+cursor.execute(' INSERT INTO alunos1 VALUES (2, "pietro", 19, "direito")')
+
+cursor.execute(' INSERT INTO notas1 VALUES (1, "arquitetura de dados relacionais", 9)')
+
+cursor.execute(' INSERT INTO notas1 VALUES (2, "direito penal", 10)')
+
+consulta = cursor.execute(' SELECT * FROM alunos1 INNER JOIN notas1 ON alunos1.id_aluno = notas1.id_aluno').fetchall()
+
+for dados in consulta:
+    print(dados)
