@@ -1,0 +1,80 @@
+import sqlite3
+
+conexão = sqlite3.connect('exemplo_vendas.db')
+
+cursor = conexão.cursor()
+
+cursor.execute(' CREATE TABLE tab_vendas32 (id REAL, preço REAL)')
+
+conexão.commit()
+
+cursor.execute(' CREATE TABLE tab_cadastro_vendedor32 (id REAL, nome TEXT)')
+
+conexão.commit()
+
+#venda dos vendedores
+
+cursor.execute(' INSERT INTO tab_vendas32 VALUES (1, 30)')
+cursor.execute(' INSERT INTO tab_vendas32 VALUES (1, 65)')
+cursor.execute(' INSERT INTO tab_vendas32 VALUES (2, 45)')
+cursor.execute(' INSERT INTO tab_vendas32 VALUES (2, 55)')
+
+cursor.execute(' INSERT INTO tab_vendas32 VALUES (3, 10)')
+cursor.execute(' INSERT INTO tab_vendas32 VALUES (3, 91)')
+cursor.execute(' INSERT INTO tab_vendas32 VALUES (4, 32)')
+cursor.execute(' INSERT INTO tab_vendas32 VALUES (4, 78)')
+
+cursor.execute(' INSERT INTO tab_vendas32 VALUES (5, 50)')
+#cadastro dos vendedores
+
+cursor.execute(' INSERT INTO tab_cadastro_vendedor32 VALUES (1, "guilherme ribeiro")')
+cursor.execute(' INSERT INTO tab_cadastro_vendedor32 VALUES (2, "pietro carvalho")')
+cursor.execute(' INSERT INTO tab_cadastro_vendedor32 VALUES (3, "jonathan banks") ')
+cursor.execute(' INSERT INTO tab_cadastro_vendedor32 VALUES (4, "gus fring") ')
+cursor.execute(' INSERT INTO tab_cadastro_vendedor32 VALUES (6, "walter white")')
+conexão.commit()
+
+consulta = cursor.execute(' SELECT * FROM tab_vendas32 INNER JOIN tab_cadastro_vendedor32 ON tab_vendas32.id = tab_cadastro_vendedor32.id').fetchall()
+
+consulta2 = cursor.execute(' SELECT * FROM tab_vendas32 LEFT JOIN tab_cadastro_vendedor32 ON tab_vendas32.id = tab_cadastro_vendedor32.id').fetchall()
+
+consulta3 = cursor.execute(' SELECT * FROM tab_vendas32 RIGHT JOIN tab_cadastro_vendedor32 ON tab_vendas32.id = tab_cadastro_vendedor32.id').fetchall()
+
+consulta4 = cursor.execute(' SELECT * FROM tab_vendas32 FULL OUTER JOIN tab_cadastro_vendedor32 ON tab_vendas32.id = tab_cadastro_vendedor32.id').fetchall()
+
+consulta5 = cursor.execute(' SELECT preço FROM tab_vendas32 UNION ALL SELECT nome FROM tab_cadastro_vendedor32').fetchall()
+
+consulta6 = cursor.execute(' SELECT id FROM tab_vendas32 UNION SELECT id FROM tab_cadastro_vendedor32').fetchall()
+
+for dados in consulta:
+    print(dados)
+
+
+print('=========================================')
+
+for dados2 in consulta2:
+    print(dados2)
+
+
+print('==========================================')
+
+for dados3 in consulta3:
+    print(dados3)
+
+
+print('============================================')
+
+for dados4 in consulta4:
+    print(dados4)
+
+
+print('=============================================')
+
+for dados5 in consulta5:
+    print(dados5)
+
+
+print('==============================================')
+
+for dados6 in consulta6:
+    print(dados6)
