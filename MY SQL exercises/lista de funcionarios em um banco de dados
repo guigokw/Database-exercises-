@@ -1,0 +1,40 @@
+-- criar banco de dados
+create database empresa
+default character set utf8mb4
+default collate utf8mb4_general_ci;
+
+-- criar tabela funcionarios
+create table funcionarios(
+id_funcionarios int not null auto_increment,
+nome varchar(80),
+nascimento date,
+salario float,
+cargo text,
+primary key (id_funcionarios)
+) default charset utf8mb4;
+
+-- alterar tabela e inserir a coluna departamento
+alter table funcionarios
+add column departamento tinyint after cargo;
+
+-- inserir dados na tabela
+insert into funcionarios values
+(default, 'luiz guilherme', '2006-07-17', 6500, 'desenvolvedor de software pleno', 1),
+(default, 'pietro carvalho', '1994-05-25', 12000, 'desenvolvedor de software senior', 2),
+(default, 'gabriela perim', '2008-06-18', 2000, 'estagiaria em desenvolvimento de software', 2),
+(default, 'mirella santos', '2007-11-06', 3800, 'desenvolvedora de software junior', 1);
+
+-- selecionar todos os funcionarios
+select * from funcionarios;
+-- selecionar funcionarios com base no salario em ordem decrescente
+select * from funcionarios order by salario desc;
+-- selecionar nome e cargo onde o salario é menor que 5000
+select nome, cargo from funcionarios where salario < 5000;
+-- calcular a media salarial dos funcionarios onde o departamento é 1
+select avg(salario) from funcionarios where departamento = 1;
+-- calcular a media salarial dos funcionarios onde o departamento é 2
+select avg(salario) from funcionarios where departamento = 2;
+-- contar quantos funcionarios existem no departamento 1
+select count(*) from funcionarios where departamento = 1;
+-- contar quantos funcionarios existem no departamento 2
+select count(*) from funcionarios where departamento = 2;
