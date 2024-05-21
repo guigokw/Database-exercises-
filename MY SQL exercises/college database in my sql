@@ -1,0 +1,51 @@
+-- criando duas tabelas
+create table aluno(
+id_aluno int not null auto_increment,
+nome varchar (100),
+nascimento date,
+sexo enum ('m', 'f'),
+primary key (id_aluno)
+) default charset=utf8mb4;
+
+
+create table curso(
+id_curso int not null auto_increment,
+curso varchar (50),
+id_aluno int,
+primary key (id_curso),
+foreign key (id_aluno) references aluno (id_aluno)
+) default charset=utf8mb4;
+
+-- inserindo valores na tabela
+insert into aluno values 
+(default, 'luiz guilherme carvalho ribeiro', '2006-07-17', 'm'),
+(default, 'gabriel torres', '2005-04-12' , 'm'),
+(default, 'talia soares', '2006-05-21', 'f');
+
+insert into curso values
+(default, 'analise e desenvolvimento de sistemas', 1),
+(default, 'medicia', 3),
+(default, 'analise e desenvolvimento de sistemas', 2);
+
+insert into aluno values
+(default, 'pietro carvalho', '2005-08-21', 'm'),
+(default, 'amanda nunes', '2003-09-29', 'f');
+
+insert into curso values
+(default , 'medicina', 5),
+(default, 'ciencia da computação', 4);
+
+-- juntando a tabela aluno com a tabela curso
+select * from aluno join curso on aluno.id_aluno = curso.id_aluno;
+
+-- analisando quantos alunos existem de cada sexo
+select sexo, count(nome) from aluno group by sexo;
+
+-- selecionando os alunos mais velhos de cada sexo
+select sexo, min(nascimento) from aluno group by sexo;
+
+-- selecionando nome do curso e id do aluno onde o curso começa com A, tenha qualquer coisa depois e termine com S 
+select curso, id_aluno from curso where curso like 'a%s';
+
+-- selecionando todos os dados de aluno onde o nascimento seja antes de 2005-08-18
+select * from aluno where nascimento < '2005-08-18'
