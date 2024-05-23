@@ -24,7 +24,7 @@ insert into aluno values
 
 insert into curso values
 (default, 'analise e desenvolvimento de sistemas', 1),
-(default, 'medicia', 3),
+(default, 'medicina', 3),
 (default, 'analise e desenvolvimento de sistemas', 2);
 
 insert into aluno values
