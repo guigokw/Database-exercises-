@@ -1,0 +1,93 @@
+-- criando banco de dados
+create database ecommerce
+default character set utf8mb4
+default collate utf8mb4_general_ci;
+
+use ecommerce;
+
+-- criando tabelas
+create table cliente (
+id_cliente int not null auto_increment,
+nome_cliente varchar (100) not null,
+email varchar (100) not null,
+data_cadastro date not null,
+unique key (email),
+primary key (id_cliente)
+) default charset=utf8mb4;
+
+create table produto (
+id_produto int not null auto_increment,
+nome_produto varchar(100),
+preço decimal (10, 2),
+primary key (id_produto)
+) default charset=utf8mb4;
+
+create table pedido (
+id_pedido int not null auto_increment,
+data_pedido date,
+id_cliente int,
+primary key (id_pedido),
+foreign key (id_cliente) references cliente (id_cliente)
+) default charset=utf8mb4;
+
+create table item_pedido (
+id_item int not null auto_increment,
+id_pedido int,
+id_produto int,
+quantidade int,
+preço_unitario decimal (10, 2),
+primary key (id_item),
+foreign key (id_pedido) references pedido (id_pedido),
+foreign key (id_produto) references produto (id_produto)
+) default charset=utf8mb4;
+
+-- inserindo dados
+insert into cliente values
+(default, 'luiz guilherme carvalho ribeiro', 'guigo17ribeiro@gmail.com', '2022-08-21'),
+(default, 'guilherme lopes ribeiro', 'guilhermeriber20@gmail.com', '2015-09-29'),
+(default, 'pietro carvalho', 'pietrocarvalho2018@gmail.com', '2021-05-23'),
+(default, 'tereza maria lopes ribeiro', 'terezalopes36@gamil.com', '2018-01-02'),
+(default, 'nelson kaiker ribeiro', 'nelsonribeiro48@gmail.com', '2014-02-21');
+
+insert into produto values 
+(default, 'notebook dell I5', '3200'),
+(default, 'mouse', '50'),
+(default, 'headphone gamer', '150'),
+(default, 'notebook dell I3', '2800'),
+(default, 'teclado gamer', '199');
+
+insert into pedido values
+(default, '2024-05-26', '1'),
+(default, '2024-06-06', '3'),
+(default, '2025-07-17', '5');
+
+insert into item_pedido values
+(default, '1', '1', '1', '3200'),
+(default, '3', '5', '1', '199'),
+(default, '2', '3', '2', '50');
+
+-- selecionando todos os dados dos clientes e seus pedidos feitos
+select * from cliente inner join pedido on cliente.id_cliente = pedido.id_cliente;
+
+-- somando os valores de cada pedido
+select pedido.id_pedido, pedido.data_pedido, pedido.id_cliente, sum(preço_unitario * quantidade)
+from pedido
+inner join item_pedido
+on pedido.id_pedido = item_pedido.id_pedido
+group by pedido.id_pedido;
+
+-- selecionando os itens mais vendidos
+select nome_produto, max(quantidade) as total_vendidos
+ from produto
+ left join item_pedido on produto.id_produto = item_pedido.id_produto
+ group by nome_produto
+ order by total_vendidos desc;
+ 
+-- selecionando todos os clientes que fizeram pedidos
+select * from cliente inner join pedido on cliente.id_cliente = pedido.id_cliente;
+
+-- atualizando a tabela item_pedido
+update item_pedido set preço_unitario = '159' where id_produto = '3';
+
+-- deletando cliente da taela cliente
+delete from cliente where nome_cliente like 'g%' limit 1;
