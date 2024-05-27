@@ -1,0 +1,102 @@
+-- criando banco de dados
+create database biblioteca
+default character set utf8mb4
+default collate utf8mb4_general_ci;
+
+use biblioteca;
+
+-- criado tabelas
+create table autor(
+id_autor int not null auto_increment,
+nome_autor varchar (100),
+nacionalidade varchar (100) default 'brasil',
+primary key (id_autor)
+) default charset=utf8mb4;
+
+create table livro(
+id_livro int not null auto_increment,
+titulo varchar (100),
+genero varchar (100),
+ano_publicacao year,
+id_autor int not null,
+primary key (id_livro),
+foreign key (id_autor) references autor (id_autor)
+) default charset=utf8mb4;
+
+create table membro(
+id_membro int not null auto_increment,
+nome_membro varchar (100),
+data_adesao date,
+email varchar (100),
+primary key (id_membro)
+) default charset=utf8mb4;
+
+create table emprestimo(
+id_emprestimo int not null auto_increment,
+data_emprestimo date,
+data_devolucao date,
+id_membro int not null,
+id_livro int not null,
+primary key (id_emprestimo),
+foreign key (id_membro) references membro (id_membro),
+foreign key (id_livro) references livro (id_livro)
+) default charset=utf8mb4;
+
+
+-- inserindo valores
+insert into autor values
+(default, 'monteiro lobato', default),
+(default, 'george rr martin','EUA'),
+(default, 'stephen king', 'EUA'),
+(default, 'machado de assis', default),
+(default, 'eduardo camillato', default);
+
+
+insert into livro values
+(default, 'guerra dos tronos', 'fantasia', '1996', '2'),
+(default, 'mihail', 'ficção cientifica', '2024', '5'),
+(default, 'IT', 'terror', '1986', '3'),
+(default, 'o picapau amarelo', 'infantil', '1939', '1'),
+(default, 'a furia dos reis', 'fantasia', '1998', '2'),
+(default, 'a cartomante', 'quadrinhos', '1903', '4');
+
+
+insert into membro values
+(default, 'luiz guilherme carvalho ribeiro', '2024-05-27', 'guigo17ribeiro@gmail.com'),
+(default, 'pietro carvalho', '2024-03-13', 'pietro05carvalho@gmail.com'),
+(default, 'simone maia', '2022-08-26', 'simone13maia@gmail.com'),
+(default, 'leonardo kaiker', '2021-09-30', 'leokaiker16@gmail.com'),
+(default, 'guilherme lopes ribeiro', '2023-10-10', 'guilhermelopesribeiro407@gmail.com');
+
+
+insert into emprestimo values
+(default, '2024-06-16', '2024-08-16', '1', '1'),
+(default, '2024-05-29', '2024-07-29', '2', '4'),
+(default, '2024-07-17', '2024-09-17', '3', '5');
+
+insert into emprestimo values
+(default, '2024-07-19', '2024-09-19', '1', '2');
+
+-- selecionando todos os livros junto com o nome de seus autores
+
+select * from livro inner join autor on livro.id_autor = autor.id_autor;
+
+-- calculando quantos livros foram emprestado por cada membro, exibindo o nome do membro e a quantidade de livros emprestados
+
+select membro.nome_membro, count(id_emprestimo) as livros_emprestados from emprestimo inner join membro on membro.id_membro = emprestimo.id_membro group by membro.nome_membro;
+
+-- selecionando o autor com mais livros cadastrados
+
+select autor.nome_autor, count(autor.id_autor) as livros_cadastrados from autor inner join livro on autor.id_autor = livro.id_autor group by autor.nome_autor order by livros_cadastrados desc limit 1;
+
+-- selecionando todos os emprestimos feitos por um membro esecifico
+
+select membro.nome_membro, count(id_emprestimo) as emprestimos_feitos from membro inner join emprestimo on membro.id_membro = emprestimo.id_membro group by membro.nome_membro having membro.nome_membro like 'luiz%';
+
+-- atualizando email
+
+update membro set email = 'leo189kaiker@gmail.com' where nome_membro like '%kaiker'; 
+
+-- deletando um livro
+
+delete from livro where titulo = 'a cartomante';
