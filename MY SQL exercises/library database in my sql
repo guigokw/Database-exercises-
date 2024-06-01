@@ -83,15 +83,27 @@ select * from livro inner join autor on livro.id_autor = autor.id_autor;
 
 -- calculando quantos livros foram emprestado por cada membro, exibindo o nome do membro e a quantidade de livros emprestados
 
-select membro.nome_membro, count(id_emprestimo) as livros_emprestados from emprestimo inner join membro on membro.id_membro = emprestimo.id_membro group by membro.nome_membro;
+select membro.nome_membro, count(id_emprestimo) as livros_emprestados
+from emprestimo
+inner join membro on membro.id_membro = emprestimo.id_membro
+group by membro.nome_membro;
 
 -- selecionando o autor com mais livros cadastrados
 
-select autor.nome_autor, count(autor.id_autor) as livros_cadastrados from autor inner join livro on autor.id_autor = livro.id_autor group by autor.nome_autor order by livros_cadastrados desc limit 1;
+select autor.nome_autor, count(autor.id_autor) as livros_cadastrados
+from autor
+inner join livro on autor.id_autor = livro.id_autor
+group by autor.nome_autor
+order by livros_cadastrados desc
+limit 1;
 
--- selecionando todos os emprestimos feitos por um membro esecifico
+-- selecionando todos os emprestimos feitos por um membro especifico
 
-select membro.nome_membro, count(id_emprestimo) as emprestimos_feitos from membro inner join emprestimo on membro.id_membro = emprestimo.id_membro group by membro.nome_membro having membro.nome_membro like 'luiz%';
+select membro.nome_membro, count(id_emprestimo) as emprestimos_feitos
+from membro
+inner join emprestimo on membro.id_membro = emprestimo.id_membro
+group by membro.nome_membro 
+having membro.nome_membro like 'luiz%';
 
 -- atualizando email
 
