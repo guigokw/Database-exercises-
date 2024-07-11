@@ -1,0 +1,113 @@
+create database hotel
+default character set utf8mb4
+default collate utf8mb4_general_ci;
+
+use hotel;
+
+create table clientes (
+id_cliente int not null auto_increment,
+nome_cliente varchar(100),
+telefone int,
+email varchar(100),
+primary key (id_cliente)
+) default charset=utf8mb4;
+
+create table quartos (
+id_quarto int not null auto_increment,
+tipo_quarto varchar(100),
+preco_diaria decimal(8,2),
+primary key (id_quarto)
+) default charset=utf8mb4;
+
+create table reservas (
+id_reserva int not null auto_increment,
+id_cliente int,
+id_quarto int,
+data_entrada date,
+data_saida date,
+primary key (id_reserva),
+foreign key (id_cliente) references clientes (id_cliente),
+foreign key (id_quarto) references quartos (id_quarto)
+) default charset=utf8mb4;
+
+create table pagamentos (
+id_pagamento int not null auto_increment,
+id_reserva int,
+data_pagamento date,
+valor_pago decimal(8,2),
+primary key (id_pagamento),
+foreign key (id_reserva) references reservas (id_reserva)
+) default charset=utf8mb4;
+
+alter table clientes
+modify column telefone bigint;
+
+-- id_cliente, nome_cliente, telefone, email
+
+insert into clientes values 
+(default, 'gabriel azevedo', 28999692555, 'gabi_azevedo207@gmail.com'),
+(default, 'leandro moura', '21999582747', 'leandrinhom7@gmail.com'),
+(default, 'maria fernandes', '27999874550', 'mahfernan67@gmail.com'),
+(default, 'lisandro lopes', '22999542123', 'lislopes97@gmail.com'),
+(default, 'guilherme ramos', '29998672020', 'guiramosrs87@gmail.com');
+
+-- id_quarto, tipo quarto, preco_diaria
+
+insert into quartos values
+(default, 'suite', '799.99'),
+(default, 'simples', '199.99'),
+(default, 'duplo', '399.99');
+
+-- id reserva , id cliente, id quarto, data entrada , data saida
+
+insert into reservas values
+(default, '2', '2', '2022-02-14', '2022-02-16'),
+(default, '5', '1', '2021-12-30', '2022-01-01'),
+(default, '3', '2', '2022-03-26', '2022-03-27'),
+(default, '1', '3', '2022-07-15', '2022-07-17'),
+(default, '4', '1', '2022-08-02', '2022-08-05');
+
+insert into reservas values
+('6', '2', '3', '2022-07-12', '2022-07-15');
+
+-- id_pagamento, id_reserva, data_pegamento, valor_pago
+
+insert into pagamentos values 
+(default, '2', '2021-12-31', '2400'),
+(default, '5', '2022-08-04', '3000'),
+(default, '1', '2022-02-14', '600'),
+(default, '3', '2022-03-27', '200'),
+(default, '4', '2022-07-17', '1200');
+
+insert into pagamentos values
+('5', '6', '2022-07-14', '1600');
+
+
+
+-- selecionando todos os clientes que tem uma reserva na suite
+
+select * from clientes inner join reservas on clientes.id_cliente = reservas.id_cliente
+where reservas.id_quarto = 1;
+
+-- calcular o valor pago por cada cliente
+
+select clientes.nome_cliente, sum(pagamentos.valor_pago) as valor_pago from clientes inner join reservas on clientes.id_cliente = reservas.id_cliente
+inner join pagamentos on reservas.id_reserva = pagamentos.id_reserva
+group by clientes.nome_cliente;
+
+-- encontre todos os quartos alugados em um periodo de tempo
+
+select quartos.tipo_quarto, count(reservas.id_cliente) as quartos_alugados
+ from quartos left join reservas on quartos.id_quarto = reservas.id_quarto
+where reservas.data_entrada between '2022-02-13' and '2022-04-01'
+group by quartos.tipo_quarto;
+
+-- liste todas as reservas feitas por um cliente especifico
+
+select * from clientes inner join reservas on clientes.id_cliente = reservas.id_cliente
+where clientes.nome_cliente like 'lean%';
+
+-- calcule a receita total obtida pelo hotel em um determinado mes
+
+select sum(valor_pago) as renda_total_no_mes from reservas inner join pagamentos on reservas.id_reserva = pagamentos.id_reserva
+where reservas.data_entrada between '2022-07-01' and '2022-07-31';
