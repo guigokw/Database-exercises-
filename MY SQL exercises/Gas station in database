@@ -1,0 +1,130 @@
+create database posto_de_gasolina
+default character set utf8mb4
+default collate utf8mb4_general_ci;
+
+use posto_de_gasolina;
+
+alter table clientes
+modify column telefone bigint;
+
+alter table veiculos
+modify column placa varchar(100);
+
+alter table combustiveis 
+modify column preço_por_litro decimal(3,2);
+
+create table clientes (
+id_cliente int not null auto_increment,
+nome_cliente varchar(100),
+telefone int,
+primary key (id_cliente)
+)default charset = utf8mb4;
+
+create table veiculos (
+id_veiculo int not null auto_increment,
+modelo varchar(100),
+placa int,
+id_cliente int,
+primary key (id_veiculo),
+foreign key (id_cliente) references clientes (id_cliente)
+) default charset = utf8mb4;
+
+create table combustiveis (
+id_combustivel int not null auto_increment,
+tipo enum("gasolina", "etanol", "diesel"),
+preço_por_litro decimal(2,2),
+primary key (id_combustivel)
+)default charset = utf8mb4;
+
+create table abastecimentos(
+id_abastecimento int not null auto_increment,
+id_veiculo int,
+id_combustivel int,
+litros int,
+data_abastecimento date,
+primary key (id_abastecimento),
+foreign key (id_veiculo) references veiculos(id_veiculo),
+foreign key (id_combustivel) references combustiveis (id_combustivel)
+) default charset = utf8mb4;
+
+-- id_cliente, nome, telefone
+
+insert into clientes values
+(default, "jose roberto gomes", 27998541369),
+(default, "lenadra lopes monteiro", 28999654713),
+(default, "jose lucio gueler", 28999775632),
+(default, "jonathan ribeiro", 28999113006),
+(default, "maria clara kapische", 289977041366),
+(default, "nelson ribeiro", 27999445859),
+(default, "leon guilherme ribeiro ramos", 28999172125),
+(default, "simone castelo", 27999665855),
+(default, "tereza nakamura", 28999552211);
+
+-- id_veiculo, modelo, placa, id_cliente
+
+insert into veiculos values
+(default, "chevrolet onix", "MRP-4587", 3),
+(default, "honda CG 160 fan", "PGT-5742", 3),
+(default, "hyundai hb20", "LGY-1123", 4),
+(default, "sedan volkswagem voyage", "PPO-5879", 8),
+(default, "honda CB 300F twister", "LAS-8457", 7),
+(default, "sedan renault logan", "NBB-4411", 1),
+(default, "fiat pulse", "LCG-9090", 6),
+(default, "ford fiesta", "MDG-9475", 2),
+(default, "CB 650R", "MMI-0203", 2),
+(default, "fiat toro", "AAO-7455", 5),
+(default, "ford ranger", "MAS-5566", 9);
+
+-- id_combustivel, tipo, preço_por_litro
+
+insert into combustiveis values
+(default, "gasolina", "6.09"),
+(default, "diesel", "5.95"),
+(default, "etanol", "2.92");
+
+-- id_abastecimento, id_veiculo, id_combistivel, litros, data_abastecimento
+
+select * from veiculos inner join clientes on veiculos.id_cliente = clientes.id_cliente;
+
+insert into abastecimentos values
+(default, 6, 1, 14, "2024-09-01"),
+(default, 7, 1, 6, "2024-09-01"),
+(default, 9, 1, 17, "2024-09-01"),
+(default, 10, 2, 20, "2024-09-01"),
+(default, 5, 3, 6, "2024-09-02"),
+(default, 1, 1, 9, "2024-09-02"),
+(default, 3, 3, 10, "2024-09-02"),
+(default, 4, 1, 7, "2024-09-03"),
+(default, 8, 1, 5, "2024-09-03"),
+(default, 11, 1, 19, "2024-09-03"),
+(default, 2, 1, 5, "2024-09-04");
+
+-- Liste todos os veículos de um determinado cliente.
+
+select clientes.nome_cliente, veiculos.modelo from clientes inner join veiculos
+on clientes.id_cliente = veiculos.id_cliente
+where clientes.nome_cliente like "%gueler";
+
+-- Calcule o total gasto em combustível por cada cliente.
+
+select clientes.nome_cliente, sum(preço_por_litro * litros) as total_gasto from clientes
+inner join veiculos on clientes.id_cliente = veiculos.id_cliente
+inner join abastecimentos on veiculos.id_veiculo = abastecimentos.id_veiculo
+inner join combustiveis on abastecimentos.id_combustivel = combustiveis.id_combustivel
+group by clientes.nome_cliente;
+
+-- Liste todos os abastecimentos feitos com um tipo específico de combustível.
+
+select * from abastecimentos inner join combustiveis 
+on abastecimentos.id_combustivel = combustiveis.id_combustivel
+where combustiveis.tipo like "gaso%";
+
+-- Identifique qual tipo de combustível gerou mais receita para o posto.
+
+select combustiveis.tipo, sum(combustiveis.preço_por_litro * litros) as receita_gerada
+from combustiveis inner join abastecimentos on combustiveis.id_combustivel = abastecimentos.id_combustivel
+group by combustiveis.tipo
+order by receita_gerada desc
+limit 1;
+
+
