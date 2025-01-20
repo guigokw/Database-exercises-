@@ -1,0 +1,235 @@
+create database sistemaJuridico
+default character set utf8mb4
+default collate utf8mb4_general_ci;
+
+use sistemaJuridico;
+
+create table casos_juridicos (
+id_caso int not null auto_Increment,
+numero_processo int not null,
+descricao text not null,
+data_abertura date not null,
+status_processo enum("pendente", "em andamento", "concluido") not null,
+primary key (id_caso),
+unique key (numero_processo)
+) default charset utf8mb4;
+
+
+create table partes_envolvidas (
+id_parte int not null auto_increment,
+id_caso int not null,
+nome varchar(100) not null,
+tipo enum("pessoa fisica", "pessoa juridica") not null,
+documento varchar(100) not null,
+primary key (id_parte),
+foreign key (id_caso) references casos_juridicos (id_caso)
+) default charset utf8mb4;
+
+create table advogados (
+id_advogado int not null auto_increment,
+nome_advogado varchar(100) not null,
+data_nascimento date not null,
+especialização enum("direito civil", "direito penal", "direito administrativo", "direito da familia", "direito tributario", "direito do trabalho", "direito previdenciario", "direito publico", "direito constitucional") not null,
+primary key (id_advogado)
+) default charset utf8mb4;
+
+create table juizes (
+id_juiz int not null auto_increment,
+nome_juiz varchar(100) not null,
+tribunal enum("tribunal de justiça", "tribunal regional federal", "tribunal regional do trabalho") not null,
+anos_experiencia tinyint not null,
+primary key (id_juiz)
+) default charset utf8mb4;
+
+create table audiencias (
+id_audiencia int not null auto_increment,
+id_caso int not null,
+id_juiz int not null,
+id_advogado int not null,
+data_audiencia date not null,
+local_audiencia varchar(100) not null,
+primary key (id_audiencia),
+foreign key (id_caso) references casos_juridicos (id_caso),
+foreign key (id_Juiz) references juizes (id_juiz),
+foreign key (id_advogado) references advogados (id_advogado)
+) default charset utf8mb4;
+
+create table sentencas (
+id_sentenca int not null auto_increment,
+id_caso int not null,
+veredicto text not null,
+descricao_adicional text not null,
+data_sentenca date not null,
+primary key (id_sentenca),
+foreign key (id_caso) references casos_juridicos (id_caso)
+) default charset utf8mb4;
+
+-- id_caso, numero_processo, descricao, data_abertura, status_processo
+insert into casos_juridicos values
+(default, 22975, "pedido de aposentadoria por tempo de serviço", "2024-08-04", "concluido"),
+(default, 19875, "investigação por furto", "2024-08-06", "em andamento"),
+(default, 00369, "pedido de aposentadoria por autismo", "2024-08-06", "em andamento"),
+(default, 44578, "pedido de pensão para 3 filhos", "2024-08-07", "concluido"),
+(default, 21597, "investigação contra estelionato", "2024-12-04", "em andamento"),
+(default, 06078, "violação de direitos do trabalhador", "2024-12-05", "pendente"),
+(default, 75968, "pedido de aposentadoria por morte", "2024-12-05", "pendente");
+
+insert into casos_juridicos values 
+(default, 11595, "danos morais a um funcionario", "2024-11-11", "em andamento"),
+(default, 98758, "calunia e difamação", "2024-08-01", "concluido");
+
+-- id_Parte, nome, tipo, documento
+insert into partes_envolvidas values 
+(default, 2, "fernando lima", "pessoa fisica", "CPF-15728136521"),
+(default, 8, "empresa linhares motos", "pessoa juridica", "CNPJ-24796321568874"),
+(default, 1, "jose roberto sanchez", "pessoa fisica", "CPF-00235744987"),
+(default, 4, "roberto monteiro", "pessoa fisica", "CPF-17896335445"),
+(default, 4, "amanda fernandes", "pessoa fisica", "CPF-22489756325"),
+(default, 2, "nilmar mendes", "pessoa fisica", "CPF-23001475968"),
+(default, 6, "empresa maças do oeste", "pessoa juridica", "CNPJ-30296574852123"),
+(default, 9, "melissa ribeiro", "pessoa fisica", "CPF-21475896322");
+
+-- id_advogado, nome_advogado, data_nasciemnto, especialização
+insert into advogados values 
+(default, "felipe martins", "1984-12-30", "direito previdenciario"),
+(default, "emilly morais", "1991-07-17", "direito da familia"),
+(default, "erick notig", "1990-01-18", "direito penal"),
+(default, "arya oliveira", "1994-03-21", "direito do trabalho");
+
+-- id_Juiz, nome_juiz, tribunal, anos_experiencia
+insert into juizes values
+(default, "william geiger", "tribunal regional do trabalho", 9),
+(default, "jose ribeiro lopes", "tribunal de justiça", 14),
+(default, "nestor silva", "tribunal regional federal", 22);
+
+select * from juizes;
+
+-- id_audiencia, id_caso, id_juiz, id_advogado, data_audiencia, local,audiencia
+insert into audiencias values
+(default, 2, 3, 3, "2024-09-01", "venda nova do imigrante - espirito santo"),
+(default, 1, 2, 1, "2024-08-24", "vila velha - espirito santo"),
+(default, 4, 2, 2, "2024-08-29", "vitoria - espirito santo"),
+(default, 8, 1, 4, "2024-12-02", "linhares - espirito santo"),
+(default, 2, 3, 3, "2024-09-12", "venda nova do imigrante - espirito santo"),
+(default, 5, 3, 3, "2024-12-21", "colatina - espirito santo"),
+(default, 5, 3, 3, "2025-01-05", "colatina - espirito santo"),
+(default, 3, 2, 1, "2024-08-28", "vitoria - espirito santo"),
+(default, 9, 3, 3, "2024-08-14", "serra - espirito santo"),
+(default, 9, 3, 3, "2024-08-22", "serra - espirito santo");
+
+insert into audiencias values
+(default, 7, 2, 1, "2024-12-12", "cachoeiro do itapemirim - espirito santo"),
+(default, 6, 3, 2, "2024-12-13", "piuma - espirito santo");
+
+insert into audiencias values
+(default, 2, 3, 3, "2024-10-19", "venda nova do imigrante - espirito santo");
+
+
+-- id_sentenca, id_caso, veredicto, descricao_adicional, data_sentenca
+insert into sentencas values 
+(default, 1, "aposentadoria fornecida", "a aposentadoria foi fornecida devido ao tempo de 25 anos de serviço de freentista", "2024-08-24"),
+(default, 4, "pensao fornecida", "a pensao foi fornecida a mae com 3 filhos apos o divorcio, o valor da pensão é igual a 15% do salario do pai", "2024-08-29"),
+(default, 9, "culpado", "apos a sentenca, o acusado foi obrigado a pagar R$:5000 em multas por calunia e difamação", "2024-09-27");
+
+-- Liste os casos judiciais com mais de uma parte envolvida.
+
+select casos_juridicos.descricao, count(partes_envolvidas.id_caso) as partes_envolvidas_no_caso from casos_juridicos
+inner join partes_envolvidas on casos_juridicos.id_caso = partes_envolvidas.id_caso
+group by casos_juridicos.descricao
+having partes_envolvidas_no_caso > 1;
+
+-- Encontre todos os advogados que atuaram em mais de um caso.
+
+select advogados.nome_advogado, count(audiencias.id_advogado) as casos_atuados from advogados
+inner join audiencias on advogados.id_advogado = audiencias.id_advogado
+group by advogados.nome_advogado
+having casos_atuados > 1;
+
+-- Encontre os casos pendentes que têm audiências programadas nos próximos 7 dias.
+
+select casos_juridicos.descricao, casos_juridicos.status_processo, audiencias.data_audiencia from casos_Juridicos
+inner join audiencias on casos_juridicos.id_caso = audiencias.id_caso
+where audiencias.data_audiencia between "2024-12-08" and "2024-12-15"
+group by casos_Juridicos.descricao, casos_Juridicos.status_Processo, audiencias.data_audiencia
+having casos_Juridicos.status_processo like "penden%";
+
+-- Liste os casos concluídos com as respectivas sentenças.
+
+select casos_juridicos.descricao, casos_juridicos.status_processo, sentencas.veredicto, sentencas.descricao_adicional from casos_juridicos
+inner join sentencas on casos_Juridicos.id_caso = sentencas.id_caso
+group by casos_juridicos.descricao, casos_juridicos.status_processo, sentencas.veredicto, sentencas.descricao_adicional;
+
+
+-- Liste os juízes que conduziram audiências para casos de status "pendente".
+
+select juizes.nome_juiz, casos_Juridicos.descricao, casos_Juridicos.status_processo from juizes
+inner join audiencias on juizes.id_juiz = audiencias.id_juiz
+inner join casos_Juridicos on audiencias.id_caso = casos_juridicos.id_caso
+group by juizes.nome_juiz, casos_Juridicos.descricao, casos_Juridicos.status_processo
+having casos_Juridicos.status_processo like "pen%";
+
+-- Identifique os casos que possuem mais de duas audiências agendadas, incluindo a quantidade de audiências.
+
+select casos_Juridicos.descricao, count(audiencias.id_caso) as audiencias_agendadas from casos_Juridicos
+inner join audiencias on casos_Juridicos.id_caso = audiencias.id_caso
+group by casos_Juridicos.descricao
+having audiencias_agendadas >= 2;
+
+-- Liste os casos em que a parte envolvida é uma pessoa jurídica e o advogado responsável tem especialização em "direito do trabalho".
+
+select casos_Juridicos.descricao, partes_envolvidas.tipo, advogados.nome_advogado, advogados.especialização from partes_envolvidas 
+inner join casos_Juridicos on partes_envolvidas.id_caso = casos_Juridicos.id_caso
+inner join audiencias on casos_Juridicos.id_caso = audiencias.id_caso
+inner join advogados on audiencias.id_advogado = advogados.id_advogado
+where partes_envolvidas.tipo like "%juridica"
+group by casos_Juridicos.descricao, partes_envolvidas.tipo, advogados.nome_advogado,  advogados.especialização
+having advogados.especialização like "%trabalho"; 
+
+-- Encontre os juízes que conduziram audiências para casos que já possuem uma sentença registrada.
+
+select juizes.nome_juiz, casos_Juridicos.descricao, sentencas.veredicto from casos_Juridicos
+inner join sentencas on casos_Juridicos.id_caso = sentencas.id_caso
+inner join audiencias on sentencas.id_caso = audiencias.id_caso
+inner join juizes on audiencias.id_juiz = juizes.id_juiz
+group by juizes.nome_juiz, casos_Juridicos.descricao, sentencas.veredicto;
+
+-- Liste os juízes que têm mais de 10 anos de experiência e conduziram audiências para casos de "direito previdenciário".
+
+select juizes.nome_juiz, juizes.anos_experiencia, advogados.especialização as casos_Julgados, count(audiencias.id_audiencia) as audiencias_realizadas from juizes 
+inner join audiencias on juizes.id_juiz = audiencias.id_juiz
+inner join advogados on audiencias.id_advogado = advogados.id_advogado
+where juizes.anos_experiencia >= 10
+group by juizes.nome_juiz, juizes.anos_experiencia, casos_julgados
+having casos_julgados like "%previden%";
+
+-- Encontre os advogados que participaram de audiências para casos com status "pendente".
+
+select advogados.nome_advogado, casos_Juridicos.status_processo from advogados
+inner join audiencias on advogados.id_advogado = audiencias.id_advogado
+inner join casos_Juridicos on audiencias.id_caso = casos_Juridicos.id_caso
+group by advogados.nome_advogado, casos_Juridicos.status_processo
+having casos_Juridicos.status_processo like "pend%";
+
+-- Liste todas as partes envolvidas em casos "concluídos", incluindo o tipo (física ou jurídica) e o status do caso.
+
+select partes_envolvidas.nome, partes_envolvidas.tipo, casos_Juridicos.status_processo from partes_envolvidas
+inner join casos_Juridicos on partes_envolvidas.id_caso = casos_Juridicos.id_caso
+group by partes_envolvidas.nome, partes_envolvidas.tipo, casos_Juridicos.status_processo
+having casos_Juridicos.status_processo like "concl%";
+
+-- Encontre os casos onde há mais de uma parte envolvida e o veredicto já foi emitido.
+
+select count(partes_envolvidas.id_parte) as partes_envolvidas_no_processo, casos_Juridicos.descricao, sentencas.veredicto from partes_envolvidas
+inner join casos_Juridicos on partes_envolvidas.id_caso = casos_Juridicos.id_caso
+inner join sentencas on casos_Juridicos.id_caso = sentencas.id_caso
+group by casos_Juridicos.descricao, sentencas.veredicto
+having partes_envolvidas_no_processo > 1;
+
+-- Liste os advogados que participaram de casos em que o veredicto foi "culpado".
+
+select advogados.nome_advogado, casos_Juridicos.descricao, sentencas.veredicto from advogados
+inner join audiencias on advogados.id_advogado = audiencias.id_advogado
+inner join casos_Juridicos on audiencias.id_caso = casos_Juridicos.id_caso
+inner join sentencas on casos_Juridicos.id_caso = sentencas.id_caso
+group by advogados.nome_advogado, casos_Juridicos.descricao, sentencas.veredicto
+having sentencas.veredicto like "culpa%";
