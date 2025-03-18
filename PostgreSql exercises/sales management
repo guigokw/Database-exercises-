@@ -1,0 +1,211 @@
+create database gerenciamento_de_vendas;
+
+ALTER DATABASE template1 REFRESH COLLATION VERSION;
+
+create type categoria as enum('smartphone', 'tablet', 'notebook', 'computador', 'monitor');
+
+create table clientes (
+id_cliente serial primary key,
+nome_cliente varchar(100),
+cidade_cliente varchar(250)
+);
+
+create table produtos (
+id_produto serial primary key,
+nome_produto varchar(250),
+preco_produto decimal(10,2),
+categoria_produto categoria
+);
+
+create table pedidos (
+id_pedido serial primary key,
+id_cliente int references clientes(id_cliente),
+data_pedido date
+);
+
+create table itens_pedido (
+id_item serial primary key,
+id_pedido int references pedidos(id_pedido),
+id_produto int references produtos(id_produto),
+quantidade int
+);
+
+-- id cliente, nome_cliente, cidade
+insert into clientes values
+(default, 'alberto silva', 'são paulo - SP'),
+(default, 'amanda mendes', 'rio de janeiro - RJ'),
+(default, 'roberto gomes', 'vitoria - ES'),
+(default, 'alan ferreira', 'são paulo - SP'),
+(default, 'pietro murdock', 'vitoria - ES'),
+(default, 'samuel ribeiro', 'belo horizonte - MG');
+
+-- id_produto, nome_produto, preco_produto, categoria(smartphone, tablet, notebook, computador, monitor)
+insert into produtos values
+(default, 'dell inspiron 24 all in one', 5199, 'notebook'),
+(default, 'pc gamer mancer saga', 2249.98, 'computador'),
+(default, 'notebook lenovo', 2992.99, 'notebook'),
+(default, 'smartphone samsung galaxy A06', 649, 'smartphone'),
+(default, 'smartphone motorola moto G34', 989, 'smartphone'),
+(default, 'tablet samsung X110 galaxy', 898, 'tablet'),
+(default, 'tablet x95 pro', 544, 'tablet'),
+(default, 'monitor AOC 22', 476.10, 'monitor'),
+(default, 'monitor gamer LG', 599, 'monitor'),
+(default, 'samsung galaxy M35', 1439.10, 'smartphone');
+
+-- id pedido, id_cliente, data_pedido
+insert into pedidos values
+(default, 3, '2025-02-14'),
+(default, 4, '2025-02-14'),
+(default, 1, '2025-02-16'),
+(default, 5, '2025-02-17'),
+(default, 2, '2025-02-17'),
+(default, 2, '2025-02-18'),
+(default, 4, '2025-02-21'),
+(default, 4, '2025-02-23'),
+(default, 3, '2025-02-24');
+
+-- id_item, id_pedido, id_produto, quantidade
+insert into itens_pedido values
+(default, 1, 6, 2),
+(default, 2, 3, 1),
+(default, 3, 7, 5),
+(default, 4, 10, 1),
+(default, 5, 8, 3),
+(default, 1, 4, 2),
+(default, 6, 5, 9),
+(default, 6, 2, 1),
+(default, 7, 6, 1),
+(default, 3, 1, 1),
+(default, 6, 3, 4),
+(default, 5, 7, 6 ),
+(default, 5, 4, 1),
+(default, 1, 5, 1),
+(default, 4, 9, 5);
+
+-- Liste todos os pedidos com os nomes dos clientes e a data do pedido.
+select clientes.nome_cliente, pedidos.data_pedido, produtos.nome_produto, itens_pedido.quantidade from clientes
+inner join pedidos on clientes.id_cliente = pedidos.id_cliente
+inner join itens_pedido on pedidos.id_pedido = itens_pedido.id_pedido
+inner join produtos on itens_pedido.id_produto = produtos.id_produto
+group by clientes.nome_cliente, pedidos.data_pedido, produtos.nome_produto, itens_pedido.quantidade
+
+-- Calcule o valor total de cada pedido.
+select pedidos.id_pedido, produtos.nome_produto, itens_pedido.quantidade, sum(produtos.preco_produto * itens_pedido.quantidade) as valor_total_do_pedido from
+pedidos inner join itens_pedido on pedidos.id_pedido = itens_pedido.id_pedido
+inner join produtos on itens_pedido.id_produto = produtos.id_produto
+group by pedidos.id_pedido, produtos.nome_produto, itens_pedido.quantidade
+
+--Encontre o cliente que mais gastou.
+select clientes.nome_cliente, sum(produtos.preco_produto * itens_pedido.quantidade) as valor_gasto_total from clientes
+inner join pedidos on clientes.id_cliente = pedidos.id_cliente
+inner join itens_pedido on pedidos.id_pedido = itens_pedido.id_pedido
+inner join produtos on itens_pedido.id_produto = produtos.id_produto
+group by clientes.nome_cliente
+order by valor_gasto_total desc
+limit 1;
+
+-- Liste os produtos mais vendidos (em quantidade).
+select produtos.nome_produto, itens_pedido.quantidade from itens_pedido
+inner join produtos on itens_pedido.id_produto = produtos.id_produto
+group by produtos.nome_produto, itens_pedido.quantidade
+order by itens_pedido.quantidade desc;
+
+-- Calcule o faturamento total por categoria de produto
+select produtos.categoria_produto, sum(produtos.preco_produto * itens_pedido.quantidade) as fauramento_total_por_categoria
+from produtos inner join itens_pedido on produtos.id_produto = itens_pedido.id_produto
+group by produtos.categoria_produto;
+
+-- Calcule o número médio de itens por pedido
+select pedidos.id_pedido, avg(itens_pedido.quantidade) as media_itens_por_pedido
+from pedidos inner join itens_pedido on pedidos.id_pedido = itens_pedido.id_pedido
+group by pedidos.id_pedido
+
+-- Listar os clientes que fizeram pedidos em uma cidade específica:
+select clientes.nome_cliente, clientes.cidade_cliente from clientes
+where clientes.cidade_cliente like 'vito%'
+group by clientes.nome_cliente, clientes.cidade_cliente
+
+-- Calcular o valor médio gasto por cliente:
+select clientes.nome_cliente, avg(produtos.preco_produto * itens_pedido.quantidade) as valor_total_gasto
+from clientes inner join pedidos on clientes.id_cliente = pedidos.id_cliente
+inner join itens_pedido on pedidos.id_pedido = itens_pedido.id_pedido
+inner join produtos on itens_pedido.id_produto = produtos.id_produto
+group by clientes.nome_cliente
+
+-- Encontrar o produto mais caro vendido:
+select produtos.nome_produto, produtos.categoria_produto, max(produtos.preco_produto) as produto_mais_caro_vendido
+from produtos inner join itens_pedido on produtos.id_produto = itens_pedido.id_produto
+inner join pedidos on itens_pedido.id_pedido = pedidos.id_pedido
+group by produtos.nome_produto, produtos.categoria_produto
+order by produto_mais_caro_vendido desc
+limit 1;
+
+-- Listar os pedidos feitos em um intervalo de datas:
+select pedidos.id_pedido, pedidos.data_pedido, clientes.nome_cliente from pedidos
+inner join clientes on pedidos.id_cliente = clientes.id_cliente
+where pedidos.data_pedido between '2025-02-14' and '2025-02-17'
+group by pedidos.id_pedido, pedidos.data_pedido, clientes.nome_cliente
+
+-- Calcular o número total de pedidos por cliente:
+select clientes.nome_cliente, count(pedidos.id_pedido) as pedidos_feitos
+from clientes inner join pedidos on clientes.id_cliente = pedidos.id_cliente
+group by clientes.nome_cliente;
+
+-- Encontrar o cliente que fez o maior número de pedidos:
+select clientes.nome_cliente, count(pedidos.id_pedido) as pedidos_feitos
+from clientes inner join pedidos on clientes.id_cliente = pedidos.id_cliente
+group by clientes.nome_cliente
+order by pedidos_feitos desc
+limit 1;
+
+-- Calcular o valor total gasto por cliente em uma categoria específica:
+select clientes.nome_cliente, produtos.categoria_produto, sum(produtos.preco_produto * itens_pedido.quantidade)
+from clientes inner join pedidos on clientes.id_cliente = pedidos.id_cliente
+inner join itens_pedido on pedidos.id_pedido = itens_pedido.id_pedido
+inner join produtos on itens_pedido.id_produto = produtos.id_produto
+where produtos.categoria_produto = 'smartphone'
+group by clientes.nome_cliente, produtos.categoria_produto;
+
+-- Listar os pedidos que contêm mais de um produto:
+select pedidos.id_pedido, produtos.nome_produto, itens_pedido.quantidade
+from pedidos inner join itens_pedido on pedidos.id_pedido = itens_pedido.id_pedido
+inner join produtos on itens_pedido.id_produto = produtos.id_produto
+where itens_pedido.quantidade > 1
+group by pedidos.id_pedido, produtos.nome_produto, itens_pedido.quantidade;
+
+-- Listar os clientes que fizeram pedidos acima de um valor específico:
+select clientes.nome_cliente, pedidos.id_pedido, sum(produtos.preco_produto * itens_pedido.quantidade) as valor_gasto
+from clientes inner join pedidos on clientes.id_cliente = pedidos.id_cliente
+inner join itens_pedido on pedidos.id_pedido = itens_pedido.id_pedido
+inner join produtos on itens_pedido.id_produto = produtos.id_produto
+group by clientes.nome_cliente, pedidos.id_pedido
+having sum(produtos.preco_produto * itens_pedido.quantidade) > 5000
+
+-- Calcular o número de produtos vendidos por categoria:
+select produtos.categoria_produto, sum(itens_pedido.quantidade) as produtos_vendidos
+from produtos right join itens_pedido on produtos.id_produto = itens_pedido.id_produto
+group by produtos.categoria_produto
+
+-- Calcular o faturamento total por mês:
+select sum(faturamento_total) as faturamento_total_no_mes
+from
+   (select pedidos.data_pedido, sum(produtos.preco_produto * itens_pedido.quantidade) as faturamento_total
+     from pedidos inner join itens_pedido on pedidos.id_pedido = itens_pedido.id_pedido
+      inner join produtos on itens_pedido.id_produto = produtos.id_produto
+       where pedidos.data_pedido between '2025-02-01' and '2025-02-28'
+        group by pedidos.data_pedido)
+     as subquery;
+
+-- liste os clientes que nunca fizeram um pedido
+select clientes.nome_cliente
+from clientes left join pedidos on clientes.id_cliente = pedidos.id_cliente
+where pedidos.id_cliente is null;
+
+-- Encontrar o produto mais vendido em termos de valor total:
+select produtos.nome_produto, produtos.categoria_produto, sum(produtos.preco_produto * itens_pedido.quantidade) as valor_faturamento_total
+from produtos inner join itens_pedido on produtos.id_produto = itens_pedido.id_produto
+group by produtos.nome_produto, produtos.categoria_produto
+order by valor_faturamento_total desc
+limit 1;
+	 
+	  
