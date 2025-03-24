@@ -1,0 +1,153 @@
+create database academia;
+
+create type plano as enum('básico', 'intermediario', 'avancado');
+
+create type especialidade as enum('musculacao', 'crossfit', 'yoga', 'pilates');
+
+create domain data_inicio_plano as date
+check (value between '2018-05-15' and current_date); -- o valor esta entre o dia da criação da academia e o dia atual
+
+create domain telefone as varchar(11)
+check (length(value) = 11 and value ~ '^[0-9]+$');
+
+create type informacoes_adicionais as (
+plano_aluno plano,
+data_inicio_plano data_inicio_plano
+);
+
+create type detalhes_treino as (
+duracao_em_minutos smallint,
+descricao_treino text
+);
+
+create table alunos (
+id_aluno serial unique primary key,
+nome_aluno varchar(200) not null,
+data_nascimento_aluno date,
+informacoes_adicionais informacoes_adicionais
+);
+
+
+create table instrutores (
+id_instrutor serial unique primary key,
+nome_instrutuor varchar(200) not null,
+especialidade_instrutor especialidade,
+telefone_instrutor telefone
+);
+
+ALTER TABLE instrutores RENAME COLUMN nome_instrutuor TO nome_instrutor;
+
+create table treinos (
+id_treino serial unique primary key,
+id_aluno int references alunos(id_aluno),
+id_instrutor int references instrutores(id_instrutor),
+data_treino date,
+detalhes_treino detalhes_treino
+);
+
+-- id_aluno, nome_aluno, data_nascimento, (plano_aluno(basico, intermediario, avancado), data_inicio_plano)
+insert into alunos values
+(default, 'pietro carvalho', '2004-08-21', ('básico', '2024-11-11')),
+(default, 'marcelo souza', '2000-01-16', ('básico', '2024-11-13')),
+(default, 'emilly ramos', '2001-11-25', ('intermediario', '2024-11-14')),
+(default, 'roberto gomez', '2001-07-17', ('básico', '2024-11-16')),
+(default, 'afonso ribeiro', '1999-08-18', ('avancado', '2024-11-18')),
+(default, 'davi brito', '2002-02-01', ('avancado', '2024-11-20')),
+(default, 'william luiz nogueira', '1995-05-25', ('intermediario', '2024-11-21'));
+
+select * from alunos;
+
+-- id_instrutor, nome_instrutor, especialidade(musculacao, crossfit, yoga, pilates), telefone
+insert into instrutores values
+(default, 'amanda mendes', 'crossfit', '28999635741'),
+(default, 'marcos venancio', 'musculacao', '28998456335'),
+(default, 'melinda messa', 'yoga', '27999558634'),
+(default, 'kauan pinheiro', 'pilates', '28999635458');
+
+-- id_treino, id_aluno, id_instrutor, data_trieno, (duracao em minutos, descricao treino)
+insert into treinos values
+(default, 2, 3, '2024-12-10', (45, 'uma sessão de yoga matinal')),
+(default, 4, 2, '2024-12-11', (60, 'um treino basico mais muito bom de musculação')),
+(default, 5, 1, '2024-12-11', (55, 'uma sessão bastante intensa de crossfit com o objetivo de emagrecer')),
+(default, 1, 4, '2024-12-12', (75, 'uma sessão de pilates com o objetivo de alinhar os ombros e melhorar a postura')),
+(default, 6, 2, '2024-12-14', (25, 'uma sessão rapida e um pouco intensa de treinos de musculação matinal')),
+(default, 3, 2, '2024-12-15', (78, 'uma sessão de treinos de musculcao intermediarios para aprimoramento do vigor')),
+(default, 4, 3, '2024-12-15', (48, 'uma sessão de yoga matinal para aliviar o estresse e revigorar')),
+(default, 7, 1, '2024-12-16', (56, 'uma sessão de treinos de crossfit com o objetivo de melhorar o vigor para praticar esportes')),
+(default, 6, 2, '2024-12-16', (50, 'uma sessão mais longa de treinos visto com o objetivo de colocar o shape'));
+
+-- Liste todos os alunos de um determinado plano
+select * from alunos
+where (informacoes_adicionais).plano_aluno = 'básico';
+
+-- Calcule a média de duração dos treinos por especialidade do instrutor.
+select instrutores.especialidade_instrutor, avg((detalhes_treino).duracao_em_minutos) as media_duracao_treino
+from instrutores inner join treinos on instrutores.id_instrutor = treinos.id_instrutor
+group by instrutores.especialidade_instrutor
+
+-- Liste os instrutores e a quantidade de treinos que cada um realizou
+select instrutores.nome_instrutor, count(treinos.id_treino) as treinos_realizados
+from instrutores inner join treinos on instrutores.id_instrutor = treinos.id_instrutor
+group by instrutores.nome_instrutor;
+
+-- Treinos Realizados por Instrutor em um Período Específico
+select instrutores.nome_instrutor, treinos.data_treino, (detalhes_treino).descricao_treino
+from instrutores inner join treinos on instrutores.id_instrutor = treinos.id_instrutor
+where treinos.data_treino between '2024-12-10' and '2024-12-14'
+order by treinos.data_treino;
+
+-- Média de Duração dos Treinos por Plano do Aluno
+select (informacoes_adicionais).plano_aluno, avg((detalhes_treino).duracao_em_minutos) as media_de_tempo_de_treino
+from alunos inner join treinos on alunos.id_aluno = treinos.id_aluno
+group by (informacoes_adicionais).plano_aluno;
+
+-- Treinos Mais Longos por Especialidade
+select instrutores.especialidade_instrutor, max((detalhes_treino).duracao_em_minutos) as treinos_mais_longos
+from instrutores inner join treinos on instrutores.id_instrutor = treinos.id_instrutor
+group by instrutores.especialidade_instrutor;
+
+-- Total de Minutos de Treino por Aluno
+select alunos.nome_aluno, sum((detalhes_treino).duracao_em_minutos) as total_de_minutos_de_treino
+from alunos inner join treinos on alunos.id_aluno = treinos.id_aluno
+group by alunos.nome_aluno;
+
+-- Instrutores com Mais de 2 Treinos Realizados
+select instrutores.nome_instrutor, count(treinos.id_treino) as treinos_realizados
+from instrutores inner join treinos on instrutores.id_instrutor = treinos.id_instrutor
+group by instrutores.nome_instrutor
+having count(treinos.id_treino) > 2;
+
+--  Treinos com Duração Acima da Média
+select treinos.data_treino, (detalhes_treino).descricao_treino, sum((detalhes_treino).duracao_em_minutos) as duracao_treino
+from treinos
+group by treinos.data_treino, (detalhes_treino).descricao_treino
+having sum((detalhes_treino).duracao_em_minutos) > (
+                   select avg((detalhes_treino).duracao_em_minutos)
+				   from treinos);
+
+select avg((detalhes_treino).duracao_em_minutos)
+from treinos;
+
+-- Alunos que Fizeram Treinos com Instrutores de Especialidade Diferente
+select alunos.nome_aluno, count(distinct treinos.id_instrutor) as treinos_com_instrutores_diferentes
+from alunos inner join treinos on alunos.id_aluno = treinos.id_aluno
+group by alunos.nome_aluno
+having count(distinct treinos.id_instrutor) > 1;
+
+-- Dias com Maior Número de Treinos
+select treinos.data_treino, count(treinos.id_treino) as treinos_feitos_no_dia from treinos
+group by treinos.data_treino
+having count(treinos.id_treino) > 1
+order by count(treinos.id_treino) desc
+
+--  Alunos que Fizeram Treinos com um Instrutor Específico
+select alunos.nome_aluno, treinos.data_treino, (detalhes_treino).descricao_treino
+from alunos inner join treinos on alunos.id_aluno = treinos.id_aluno
+inner join instrutores on treinos.id_instrutor = instrutores.id_instrutor
+where instrutores.nome_instrutor like 'mar%';
+
+-- Total de Treinos por Especialidade e Plano do Aluno
+select instrutores.especialidade_instrutor, (informacoes_adicionais).plano_aluno, count(treinos.id_treino) as treinos_realizados
+from alunos inner join treinos on alunos.id_aluno = treinos.id_aluno
+inner join instrutores on treinos.id_instrutor = instrutores.id_instrutor
+group by instrutores.especialidade_instrutor, (informacoes_adicionais).plano_aluno
