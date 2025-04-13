@@ -1,0 +1,180 @@
+create database gerenciamento_filmes;
+
+create type classificacao as enum('L', '10', '12', '14', '16', '18');
+
+create domain codigo_filme as varchar(5)
+check(length(value) = 5);
+
+create domain duracao_filme as smallint
+check (value between 5 and 240);
+
+create domain data_lancamento as date
+check (value < current_date);
+
+create type endereco as (
+rua text,
+numero_rua int,
+cidade varchar(100),
+estado varchar(100) 
+);
+
+create table cinema (
+id_cinema serial primary key,
+nome_cinema varchar(200) not null,
+endereco endereco not null
+);
+
+create table filme (
+codigo codigo_filme primary key,
+titulo_filme varchar(200) not null, 
+duracao_minutos duracao_filme,
+classificacao_etaria classificacao,
+data_lancamento data_lancamento
+);
+
+
+create table sessao (
+id_sessao serial primary key,
+filme_codigo codigo_filme references filme(codigo),
+id_cinema int references cinema(id_cinema),
+data_hora timestamp,
+ingressos_vendidos int default 0
+);
+
+create or replace function listar_filmes_por_classificacao(classificacao_filme classificacao)
+returns table (codigo codigo_filme, titulo varchar(200), duracao_em_minutos duracao_filme) as $$
+begin
+return query
+select f.codigo, f.titulo_filme, f.duracao_minutos from filme f
+where f.classificacao_etaria = classificacao_filme;
+end;
+$$ language plpgsql;
+
+create or replace function sessoes_agendadas(codigo_input codigo_filme)
+returns int as $$
+declare
+ids_sessoes int;
+begin
+select count(s.id_sessao) into ids_sessoes from sessao s
+where filme_codigo = codigo_input;
+
+return ids_sessoes;
+end;
+$$ language plpgsql;
+
+
+CREATE OR REPLACE FUNCTION calcular_total_arrecadado(
+    codigo_filme_input codigo_filme,
+    preco_ingresso NUMERIC(6,2))
+RETURNS numeric(10,2) AS $$
+declare
+total_ingressos int = 0;
+BEGIN
+    select sum(ingressos_vendidos) into total_ingressos
+	from sessao
+	where filme_codigo = codigo_filme_input;
+
+	return total_ingressos * preco_ingresso;
+END;
+$$ LANGUAGE plpgsql;
+
+create or replace function filme_mais_popular(id_cinema_input int)
+returns table (titulo varchar(200), total_ingressos_vendidos bigint) as $$
+begin
+return query
+select f.titulo_filme, sum(s.ingressos_vendidos) as total_ingressos_vendidos from
+filme f inner join sessao s on f.codigo = s.filme_codigo
+inner join cinema c on s.id_cinema = c.id_cinema
+where c.id_cinema = id_cinema_input
+group by f.titulo_filme
+order by total_ingressos_vendidos desc
+limit 1;
+end;
+$$ language plpgsql;
+
+create or replace function total_ingressos_vendidos_em_periodo_tempo(comeco_data date, fim_data date)
+returns table (nome_cinema varchar(200), total_ingressos_vendidos bigint) as $$
+begin
+return query
+select c.nome_cinema, sum(s.ingressos_vendidos) as total_ingressos_vendidos from
+cinema c inner join sessao s on c.id_cinema = s.id_cinema
+inner join filme f on s.filme_codigo = f.codigo
+where f.data_lancamento between comeco_data and fim_data
+group by c.nome_cinema
+order by total_ingressos_vendidos desc
+limit 1;
+end;
+$$ language plpgsql;
+
+
+-- id_cinema, nome_cinema (rua, numero_rua, cidade, estado)
+insert into cinema values
+(default, 'cinema vitoria jungle', ('rua manoel carvalho', 103, 'florianoposlis', 'parana')),
+(default, 'pietro craftmovies', ('rua soccer mistics', 21, 'sao paulo', 'sao paulo')),
+(default, 'sony pictures theatre', ('rua california vacations', 55 , 'los angeles', 'california'));
+
+insert into cinema values
+(default, 'cinema guarulhos', ('rua lana ferreira', 21, 'guarulhos', 'sao paulo'));
+
+-- codigo, titulo_filme, duracao_minutos, classificacao_etaria, data_lancamento
+insert into filme values
+('l98ç7', 'minecraft', 112, 'L', '2025-04-05'),
+('pu247', 'deadpool e wolverine', 141, '18', '2024-06-14'),
+('lg85p', 'branca de neve', 130, 'L', '2025-03-31'),
+('n998o', 'mortal kombat', 122, '14', '2021-04-24'),
+('kk028', 'superman', 182, '16', '2025-04-06');
+
+insert into filme values
+('n9980', 'lilo e stich', 98, 'L', '2025-03-27');
+
+-- id_sessão, codigo_filme, id_cinema, data_hora, ingressos_vendidos
+insert into sessao values
+(default, 'l98ç7', 2, '2025-04-08 20:30:00', 121),
+(default, 'pu247', 1, '2024-06-17 19:00:00', 97),
+(default, 'n998o', 1, '2021-04-27 12:17:32', 85),
+(default, 'kk028', 3, '2025-04-06 16:00:00' , 280);
+
+insert into sessao values
+(default, 'kk028', 2, '2025-04-08 19:00:00', 186);
+
+insert into sessao values
+(default, 'l98ç7', 2, '2025-04-11 18:00:00', 85);
+
+select verificar_sessao_lotada(4);
+select verificar_sessao_lotada(2);
+select verificar_sessao_lotada(6);
+
+select * from listar_filmes_por_classificacao('L');
+select * from listar_filmes_por_classificacao('18');
+
+select * from sessoes_agendadas('pu247');
+select * from sessoes_agendadas('n998o');
+select * from sessoes_agendadas('kk028');
+
+select * from calcular_total_arrecadado('kk028', 20);
+select * from calcular_total_arrecadado('pu247', 1);
+
+select * from filme_mais_popular(2);
+select * from filme_mais_popular(1);
+
+select * from total_ingressos_vendidos_em_periodo_tempo('2024-06-01', '2025-04-08');
+
+-- Listar cinemas de um estado específico (usando o tipo composto
+select * from cinema where (endereco).estado like 'sa%';
+
+-- Contar quantos filmes existem por classificação etária
+select filme.classificacao_etaria, count(filme.codigo) as filmes_existentes
+from filme
+group by  filme.classificacao_etaria;
+
+-- Calcular a média de ingressos vendidos por sessão
+select avg(ingressos_vendidos) as media_de_ingressos_vendidos
+from sessao;
+
+-- Listar sessões ordenadas por data (mais recentes primeiro)
+select * from sessao
+order by data_hora desc;
+
+-- Buscar filmes com duração superior a 2 horas
+select * from filme
+where duracao_minutos > 120;
