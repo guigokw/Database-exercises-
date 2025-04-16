@@ -1,0 +1,136 @@
+create database posto_de_saude;
+
+create type tipos_consulta as enum('consulta basica', 'exame', 'retorno', 'emergencia');
+
+create type especialidade as enum('cardiologia', 'psiquiatria', 'ortodontia', 'pediatria', 'medicina interna', 'neurologia');
+
+create type plano as enum('basico', 'particular', 'premium');
+
+create type status as enum('agendada', 'realizada', 'cancelada');
+
+
+create domain crm as varchar(6) 
+check (length(value) = 6 and value ~ '^[0-9]+$' );
+
+create domain cpf as varchar(11)
+check (length(value) = 11 and value ~ '^[0-9]+$');
+
+create type horario_agendado as (
+data_consulta date,
+hora_inicial time,
+hora_final time,
+sala text
+);
+
+create table medicos (
+crm_medico crm not null primary key,
+nome_medico varchar(200) not null,
+especialidade_medico especialidade
+);
+
+create table pacientes (
+cpf_paciente cpf not null primary key,
+nome_paciente varchar(200) not null,
+data_nascimento_paciente date not null,
+plano_saude_paciente plano not null
+);
+
+create table consulta (
+id_consulta serial primary key,
+horario_consulta horario_agendado,
+status_consulta status,
+tipo_consulta tipos_consulta,
+crm_medico varchar(6) references medicos(crm_medico),
+cpf_paciente varchar(11) references pacientes(cpf_paciente)
+);
+
+
+
+-- crm_medico, nome_medico, especialidade
+insert into medicos values
+('357894', 'oliver grayson', 'pediatria'),
+('654724', 'ignacio varga', 'cardiologia'),
+('215879', 'thiago ribeiro', 'psiquiatria'),
+('006985', 'amanda nunes', 'ortodontia'),
+('336987', 'paolo geiger', 'medicina interna');
+
+-- cpf_paciente, nome_paciente, data_nascimento, plano_saude
+insert into pacientes values
+('11569875422', 'heitor pimentel', '2001-06-23', 'basico'),
+('23659875546', 'emilly ramos', '2008-05-31', 'particular'),
+('23659874126', 'nolan north', '1979-11-21', 'premium'),
+('23654799451', 'nathan drake', '1970-07-17', 'premium'),
+('32658874195', 'leonardo carvalho', '2021-01-25', 'particular'),
+('45789635532', 'nelson silva', '1981-03-01', 'basico'),
+('25698741236', 'amelia machado', '1999-04-02', 'basico'),
+('23658977457', 'lucia mendes', '1990-08-21', 'basico');
+
+-- (data_consulta, hora_inicial, hora_final, sala), status_consulta, crm_medico, cpf_paciente
+insert into consulta values
+(default, ('2025-01-02', '11:30:06', '12:11:34', 'sala 09'), 'realizada', 'exame' , '357894', '32658874195'),
+(default, ('2025-01-05', '08:18:24', '08:31:21', 'sala 11'), 'realizada','consulta basica' , '336987', '11569875422'),
+(default, ('2025-01-13', '13:38:08', '14:00:26', 'sala 04'), 'cancelada', 'consulta basica' ,'006985', '23654799451'),
+(default, ('2025-01-25', '07:04:01', '07:41:03', 'sala 04'), 'realizada', 'retorno' , '006985', '23659875546'),
+(default, ('2025-02-08', '09:07:17', '09:16:42', 'sala 11'), 'cancelada', 'consulta basica' ,'336987', '45789635532'),
+(default, ('2025-02-16', '14:15:18', '14:40:40', 'sala 07'), 'realizada', 'retorno' ,'654724', '23659874126'),
+(default, ('2025-02-21', '10:45:05', '11:22:32', 'sala 14'), 'realizada', 'exame', '215879', '25698741236'),
+(default, ('2025-04-16', '11:30:04', '11:50:04', 'sala 11'), 'agendada', 'consulta basica' , '336987', '11569875422'),
+(default, ('2025-04-18', '09:39:59', '10:00:45', 'sala 14'), 'agendada', 'emergencia' ,'215879', '23654799451');
+
+insert into consulta values
+(default, ('2025-04-06', '11:58:06', '12:13:14', 'sala 14'), 'agendada', 'consulta basica', '215879', '45789635532');
+
+insert into consulta values
+(default, ('2025-04-16', '12:05:06', '12:31:14', 'sala 07'), 'agendada', 'retorno', '654724', '23658977457');
+
+insert into consulta values
+(default, ('2025-04-16', '12:35:14', '12:58:39', 'sala 11'), 'realizada', 'retorno', '336987', '23659875546');
+
+insert into consulta values
+(default, ('2025-04-14', '08:48:18', '09:12:01', 'sala 11'), 'cancelada', 'consulta basica', '336987', '23654799451');
+
+select * from consulta;
+
+-- Função básica para calcular idade do paciente
+create or replace function calcular_idade(nascimento date)
+returns smallint as $$
+declare
+idade smallint;
+begin
+idade = extract(year from current_date) - extract(year from nascimento);
+return idade;
+end;
+$$ language plpgsql;
+
+select calcular_idade('2006-07-17');
+select calcular_idade('1951-01-21');
+
+drop function  gerar_relatorio_diario
+
+-- Função avançada para gerar relatório diário
+create or replace function gerar_relatorio_diario(dia date)
+returns table (especialidade especialidade, tempo_consulta time, consultas_realizadas bigint) as $$
+begin
+return query
+select m.especialidade_medico, sum((c.horario_consulta).hora_final - (c.horario_consulta).hora_inicial)::time as tempo_consulta, count(c.id_consulta) as consultas_realizadaa from medicos m
+inner join consulta c on m.crm_medico = c.crm_medico
+where (c.horario_consulta).data_consulta = dia 
+group by m.especialidade_medico;
+end;
+$$ language plpgsql;
+
+select * from gerar_relatorio_diario('2025-01-25');
+select * from gerar_relatorio_diario('2025-02-16');
+select * from gerar_relatorio_diario('2025-04-16');
+
+-- Consulta que mostra médicos mais demandados:
+select medicos.especialidade_medico, count(consulta.id_consulta) as consultas_feitas, sum((consulta.horario_consulta).hora_final - (consulta.horario_consulta).hora_inicial)::time as tempo_total_de_consulta
+from consulta inner join medicos on consulta.crm_medico = medicos.crm_medico
+group by medicos.especialidade_medico
+order by consultas_feitas desc
+
+-- Análise de cancelamentos:
+select pacientes.plano_saude_paciente, count(consulta.id_consulta) as consultas_canceladas
+from pacientes inner join consulta on pacientes.cpf_paciente = consulta.cpf_paciente
+where (consulta.horario_consulta).data_consulta between '2025-01-16' and current_date and consulta.status_consulta = 'cancelada'
+group by pacientes.plano_saude_paciente
