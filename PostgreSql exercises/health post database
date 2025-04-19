@@ -89,6 +89,17 @@ insert into consulta values
 insert into consulta values
 (default, ('2025-04-14', '08:48:18', '09:12:01', 'sala 11'), 'cancelada', 'consulta basica', '336987', '23654799451');
 
+insert into consulta values
+(default, ('2025-04-17', '08:10:15', '08:22:13', 'sala 11'), 'realizada', 'consulta basica', '336987', '45789635532'),
+(default, ('2025-04-17', '08:28:19', '08:41:50', 'sala 11'), 'realizada', 'retorno', '336987', '11569875422'),
+(default, ('2025-04-17', '08:50:20', '09:04:27', 'sala 11'), 'cancelada', 'consulta basica', '336987', '23659875546'),
+(default, ('2025-04-17', '09:15:22', '09:27:21', 'sala 11'), 'realizada', 'exame', '336987', '23658977457'),
+(default, ('2025-04-17', '09:38:54', '09:52:41', 'sala 11'), 'realizada', 'consulta basica', '336987', '32658874195'),
+(default, ('2025-04-17', '10:50:04', '11:11:54', 'sala 11'), 'agendada', 'exame', '336987', '25698741236');
+
+insert into consulta values
+(default, ('2025-04-17', '11:30:11', '11:52:34', 'sala 11'), 'agendada', 'consulta basica', '336987', '23659874126');
+
 select * from consulta;
 
 -- Função básica para calcular idade do paciente
@@ -123,6 +134,49 @@ select * from gerar_relatorio_diario('2025-01-25');
 select * from gerar_relatorio_diario('2025-02-16');
 select * from gerar_relatorio_diario('2025-04-16');
 
+-- Cálculo de IMC
+create or replace function calcular_imc(peso numeric(5,2), altura numeric(3,2))
+returns text as $$
+declare
+imc numeric(3,1);
+begin
+imc = peso / (altura * altura);
+
+if (imc < 18.5) then
+return 'abaixo';
+elseif (imc < 24.9) then
+return 'normal';
+elseif (imc < 29.9) then
+return 'sobrepeso';
+elseif (imc < 39.9) then
+return 'obesidade';
+else
+return 'obesidade morbida';
+end if;
+end;
+$$ language plpgsql;
+
+select calcular_imc(77.8, 1.70);
+select calcular_imc(81, 1.79);
+select calcular_imc(45, 1.67);
+select calcular_imc(67, 1.70);
+
+-- Histórico Médico Completo
+create or replace function historico_medico(cpf cpf)
+returns table (nome_paciente varchar(200), tipo_consulta tipos_consulta, nome_medico varchar(200), status_consulta status) as $$
+begin
+return query
+select p.nome_paciente, c.tipo_consulta, m.nome_medico, c.status_consulta from consulta c
+inner join medicos m on c.crm_medico = m.crm_medico
+inner join pacientes p on c.cpf_paciente = p.cpf_paciente
+where p.cpf_paciente = cpf;
+end;
+$$ language plpgsql;
+
+select * from historico_medico('45789635532');
+select * from historico_medico('23654799451');
+
+
 -- Consulta que mostra médicos mais demandados:
 select medicos.especialidade_medico, count(consulta.id_consulta) as consultas_feitas, sum((consulta.horario_consulta).hora_final - (consulta.horario_consulta).hora_inicial)::time as tempo_total_de_consulta
 from consulta inner join medicos on consulta.crm_medico = medicos.crm_medico
@@ -134,3 +188,30 @@ select pacientes.plano_saude_paciente, count(consulta.id_consulta) as consultas_
 from pacientes inner join consulta on pacientes.cpf_paciente = consulta.cpf_paciente
 where (consulta.horario_consulta).data_consulta between '2025-01-16' and current_date and consulta.status_consulta = 'cancelada'
 group by pacientes.plano_saude_paciente
+
+-- Consultas por Especialidade
+select medicos.especialidade_medico, (consulta.horario_consulta).data_consulta, (consulta.horario_consulta).hora_inicial, medicos.nome_medico, pacientes.nome_paciente
+from medicos inner join consulta on medicos.crm_medico = consulta.crm_medico
+inner join pacientes on consulta.cpf_paciente = pacientes.cpf_paciente
+where especialidade_medico = 'cardiologia'
+order by (consulta.horario_consulta).data_consulta, (consulta.horario_consulta).hora_inicial;
+
+-- Médicos Mais Ocupados
+select medicos.nome_medico, count(consulta.id_consulta) as consultas_realizada
+from medicos inner join consulta on medicos.crm_medico = consulta.crm_medico
+where (consulta.horario_consulta).data_consulta between '2025-04-13' and current_date
+group by medicos.nome_medico
+having count(consulta.id_consulta) > 3
+
+-- Consultas Canceladas
+select consulta.tipo_consulta, count(consulta.id_consulta) as consultas_canceladas, 
+from consulta
+where consulta.status_consulta = 'cancelada' and (consulta.horario_consulta).data_consulta between '2025-03-19' and current_date
+group by consulta.tipo_consulta
+
+-- Pacientes Frequentes
+select pacientes.nome_paciente, pacientes.plano_saude_paciente, count(consulta.id_consulta) as consultas_feitas
+from pacientes inner join consulta on pacientes.cpf_paciente = consulta.cpf_paciente
+where (consulta.horario_consulta).data_consulta between '2025-03-19' and current_date
+group by pacientes.nome_paciente, pacientes.plano_saude_paciente
+having count(consulta.id_consulta) >= 2;
