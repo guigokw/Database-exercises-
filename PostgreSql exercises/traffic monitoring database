@@ -1,0 +1,509 @@
+create database monitoramento_trafego_urbano;
+
+create type tipo_via as enum('AVENIDA', 'RUA', 'RODOVIA', 'VIELA');
+
+create type status_sensor_trafego as enum('ATIVO', 'MANUTENCAO', 'INATIVO');
+
+create type intensidade_registro as enum('BAIXA', 'MODERADA', 'ALTA', 'CONGESTIONADO');
+
+create type tipo_infracao as enum('EXCESSO DE VELOCIDADE', 'AVANCO DE SINAL', 'DIRECAO PROIBIDA');
+
+create type gravidade_infracao as enum('LEVE', 'MEDIA', 'GRAVE');
+
+create type urgencia_alerta as enum('BAIXO', 'MEDIO', 'ALTO');
+
+create type tipo_alerta_transito as enum('ACIDENTE', 'CURVA PERIGOSA', 'DESCIDA INGREME');
+
+create domain limite_velocidade as smallint
+check (value between 20 and 120);
+
+create domain velocidade_media as smallint
+check (value between 0 and 200);
+
+create domain horario_valido as time
+check (value between '00:00:00' and '23:59:59');
+
+create type dados_via as (
+nome_via varchar(200),
+tipo_via tipo_via,
+limite_velocidade limite_velocidade,
+quantidade_sensores int
+);
+
+create table via_urbana (
+id_via serial primary key,
+dados_via dados_via
+);
+
+create table sensor_trafego (
+id_sensor serial primary key,
+id_via int references via_urbana(id_via),
+localizacao point,
+status_sensor status_sensor_trafego
+);
+
+create table registro_trafego (
+id_registro serial primary key,
+id_sensor int references sensor_trafego(id_sensor),
+data_hora timestamp,
+velocidade_media velocidade_media,
+intensidade intensidade_registro
+);
+
+select * from registro_trafego
+
+alter table registro_trafego add column volume_veiculos int;
+alter table registro_trafego alter column data_hora type time;
+alter table registro_trafego rename column data_hora to hora_registro;
+alter table registro_trafego add column data_registro date; 
+
+create table infracao (
+id_infracao serial primary key,
+id_registro int references registro_trafego(id_registro),
+tipo_infracao tipo_infracao,
+gravidade_infracao gravidade_infracao
+);
+
+-- id, (nome_via, tipo_Via, limite_velocidade, quantidade_sensores)
+insert into via_urbana values
+(default, ('leão rei', 'RUA', 40, 2)),
+(Default, ('valores dos campos', 'AVENIDA', 80, 5)),
+(default, ('unico valor', 'AVENIDA', 60, 3)),
+(default, ('ribeiro valadares', 'RODOVIA', 100, 8)),
+(default, ('machado vieira', 'VIELA', 20, 1)),
+(default, ('elena subatrini', 'RODOVIA', 120, 14)),
+(default, ('pietro cassirani', 'AVENIDA', 60, 4)),
+(default, ('folha nova', 'RUA', 30, 1));
+
+-- id_sensor, id_via, localização, status_sensor
+insert into sensor_trafego values
+(default, 3, '(128,291)', 'ATIVO'),
+(default, 5, '(346,248)', 'ATIVO'),
+(default, 7, '(558,100)', 'MANUTENCAO'),
+(default, 1, '(104,200)', 'INATIVO'),
+(default, 3, '(120,300)', 'MANUTENCAO'),
+(default, 4, '(99,555)', 'ATIVO'),
+(default, 2, '(1024,148)', 'ATIVO'),
+(Default, 6, '(2457,222)', 'MANUTENCAO'),
+(default, 8, '(96,91)', 'INATIVO'),
+(default, 2, '(1031,58)', 'ATIVO');
+
+select * from via_urbana;
+select * from sensor_trafego;
+
+-- id_registro, id_sensor, data_hora, velocidade_Media, intensidade
+insert into registro_trafego values
+(default, 7, '2025-04-21 17:30:00', 47, 'CONGESTIONADO', 487),
+(Default, 10, '2025-04-23 11:48:35', 72, 'MODERADA', 114),
+(default, 6, '2025-04-26 21:49:57', 104, 'BAIXA', 50),
+(default, 2, '2025-04-30 09:41:00', 17, 'BAIXA', 62),
+(default, 7, '2025-05-02 15:34:22',  62, 'ALTA', 250);
+
+insert into registro_trafego values
+(default, 6, '2025-05-04 18:05:00', 60, 'ALTA', 111),
+(default, 6, '2025-05-11 18:50:00', 72, 'MODERADA', 75);
+
+select * from registro_trafego;
+
+-- id_infracao, id_registro, tipo_infracao, gravidade_Infracao
+insert into infracao values 
+(default, 2, 'AVANCO DE SINAL', 'GRAVE'),
+(default, 5, 'EXCESSO DE VELOCIDADE', 'GRAVE'),
+(default, 3, 'DIRECAO PROIBIDA', 'MEDIA'),
+(default, 4, 'DIRECAO PROIBIDA', 'LEVE'),
+(default, 5, 'AVANCO DE SINAL', 'GRAVE'),
+(default, 1, 'AVANCO DE SINAL', 'MEDIA');
+
+insert into infracao values
+(default, 1, 'EXCESSO DE VELOCIDADE', 'GRAVE'),
+(default, 3, 'EXCESSO DE VELOCIDADE', 'GRAVE'),
+(default, 3, 'AVANCO DE SINAL', 'GRAVE');
+
+insert into infracao values
+(default, 5, 'EXCESSO DE VELOCIDADE', 'GRAVE');
+
+-- Vias com maior número de infrações
+select (via_urbana.dados_via).nome_via, count(infracao.id_infracao) as numero_de_infracoes
+from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+inner join infracao on registro_trafego.id_registro = infracao.id_registro
+where infracao.gravidade_infracao = 'GRAVE'
+group by (via_urbana.dados_via).nome_via
+order by count(infracao.id_infracao) desc
+limit 5;
+
+-- Ranking de sensores por tráfego
+select sensor_trafego.id_sensor, dense_rank() over(order by avg(registro_trafego.volume_veiculos) desc) as classificacao_sensores
+from sensor_trafego inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+group by sensor_trafego.id_sensor;
+
+-- Variação de velocidade ao longo do dia
+select (via_urbana.dados_via).nome_via, avg(registro_trafego.velocidade_media) as velocidade_media,
+case
+when registro_trafego.hora_registro between '06:00:00' and '11:59:59' then
+'MANHÃ'
+when registro_trafego.hora_registro between '12:00:00' and '17:59:59' then 
+'TARDE'
+when registro_trafego.hora_registro between '18:00:00' and '23:59:59' then 
+'NOITE'
+else
+'MADRUGADA'
+end as horario_do_dia
+from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+group by (via_urbana.dados_via).nome_via, horario_do_dia;
+
+-- Horários de pico por via
+select distinct on (horario_de_pico) (via_urbana.dados_via).nome_via,
+case
+when registro_trafego.hora_registro between '06:00:00' and '11:59:59' then
+'MANHÃ'
+when registro_trafego.hora_registro between '12:00:00' and '17:59:59' then 
+'TARDE'
+when registro_trafego.hora_registro between '18:00:00' and '23:59:59' then 
+'NOITE'
+else
+'MADRUGADA'
+end as horario_de_pico,
+case
+when sum(registro_trafego.volume_veiculos) > 300 then
+'CONGESTIONADO'
+when  sum(registro_trafego.volume_veiculos) > 250 then
+'ALTA'
+when  sum(registro_trafego.volume_veiculos) > 70 then
+'MEDIA'
+else
+'BAIXA'
+end as intensidade_do_trafego
+from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+group by horario_de_pico, (via_urbana.dados_via).nome_via;
+
+select max(horario_tarde) from horario_registro_tarde;
+
+-- Ranking de Vias por Intensidade de Tráfego
+select (via_urbana.dados_via).nome_via, avg(registro_trafego.volume_veiculos) as volume_de_veiculos, dense_rank() over(order by avg(registro_trafego.volume_veiculos) desc) as ranking_de_intensidade
+from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+where sensor_trafego.status_sensor = 'ATIVO'
+group by (via_urbana.dados_via).nome_via;
+
+--  Variação Percentual de Velocidade por Período
+select (via_urbana.dados_via).nome_via, ((registro_trafego.velocidade_media - lag(registro_trafego.velocidade_media) over(partition by (via_urbana.dados_via).nome_via) / lag(registro_trafego.velocidade_media) over(partition by (via_urbana.dados_via).nome_via) * 100)) as valor_percentual,
+case 
+when registro_trafego.hora_registro between '06:00:00' and '11:59:59' then
+'MANHÃ'
+when registro_trafego.hora_registro between '12:00:00' and '17:59:59' then 
+'TARDE'
+when registro_trafego.hora_registro between '18:00:00' and '23:59:59' then 
+'NOITE'
+else
+'MADRUGADA'
+end as horario_do_dia
+from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+group by (via_urbana.dados_via).nome_via, horario_do_dia, registro_trafego.velocidade_media;
+
+-- Janela de Maior Congestionamento
+select distinct on ((via_urbana.dados_via).nome_via) (via_urbana.dados_via).nome_via,  registro_trafego.hora_registro, sum(registro_trafego.volume_veiculos) over(partition by via_urbana.id_via order by registro_trafego.data_registro, registro_trafego.hora_registro rows between 2 preceding and current row) as volume_veiculos
+from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+group by (via_urbana.dados_via).nome_via, registro_trafego.volume_veiculos, registro_trafego.data_registro, registro_trafego.hora_registro, via_urbana.id_via
+order by (via_urbana.dados_via).nome_via, volume_veiculos desc;
+
+-- Comparação com a Média Móvel
+select (via_urbana.dados_via).nome_via, avg(registro_trafego.velocidade_media) over(partition by via_urbana.id_via order by registro_trafego.data_registro, registro_trafego.hora_registro rows between 4 preceding and current row) as media_movel,
+case
+  when (registro_trafego.velocidade_media > avg(registro_trafego.velocidade_media) over(partition by via_urbana.id_via order by registro_trafego.data_registro, registro_trafego.hora_registro rows between 4 preceding and current row) * 1.10) then 'ACIMA'
+  when (registro_trafego.velocidade_media < avg(registro_trafego.velocidade_media) over(partition by via_urbana.id_via order by registro_trafego.data_registro, registro_trafego.hora_registro rows between 4 preceding and current row) * 0.90) then 'ABAIXO'
+  else 'NORMAL'
+  end as comparação_com_media_movel
+from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+group by (via_urbana.dados_via).nome_via, registro_trafego.id_registro, via_urbana.id_via; 
+
+-- Sensores com Maior Número de Infrações Consecutivas
+select (via_urbana.dados_via).nome_via, sensor_trafego.id_sensor, count(infracao.id_infracao) as quantidade_multas_graves, lag(infracao.gravidade_infracao) over(partition by sensor_trafego.id_sensor order by registro_trafego.data_registro, registro_trafego.hora_registro, registro_trafego.hora_registro) as infracao_anterior, lead(infracao.gravidade_infracao) over(partition by sensor_trafego.id_sensor order by registro_trafego.data_registro, registro_trafego.hora_registro) as infracao_posterior
+from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+inner join infracao on registro_trafego.id_registro = infracao.id_registro
+where infracao.gravidade_infracao = 'GRAVE'
+group by (via_urbana.dados_via).nome_via, sensor_trafego.id_sensor, sensor_trafego.id_sensor, infracao.gravidade_infracao,registro_trafego.data_registro, registro_trafego.hora_registro
+
+-- Função de Verificação de Limite de Velocidade
+create or replace function verificar_velocidade(id_via_input int, limite_velocidade_input limite_velocidade)
+returns text as $$
+declare
+media_velocidade_variavel int;
+begin
+select registro_trafego.velocidade_media into media_velocidade_variavel
+from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+where via_urbana.id_via = id_via_input;
+
+if not found then 
+raise exception 'nao foi possivel verificar a velocidade pois o id da via nao foi encontrado';
+end if;
+
+if media_velocidade_variavel <= 0 or media_velocidade_variavel is null then
+raise exception 'nao foi possivel verificar a velocidade pois nao há registro de velocidade media';
+end if;
+
+case
+   when media_velocidade_variavel > limite_velocidade_input then
+     return 'FORA DOS LIMITES DE VELOCIDADE';
+   else
+     return 'DENTRO DOS LIMITES DE VELOCIDADE';
+end case;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Erro no varificação: %', SQLERRM;
+        RETURN false;
+end;
+$$ language plpgsql;	 
+
+select verificar_velocidade(4, 60);
+
+select * from registro_trafego;
+
+-- Classificação de Tráfego
+create or replace function classificar_trafego(volume_veiculos_input int)
+returns intensidade_registro as $$
+begin
+case 
+    when volume_veiculos_input < 40 then
+	  return 'BAIXA';
+	when volume_veiculos_input < 80 then
+	  return 'MODERADA';
+	when volume_veiculos_input < 140 then
+	  return 'ALTA';
+	else 
+	  return 'CONGESTIONADO';
+end case;	  
+	  
+end;
+$$ language plpgsql;
+
+select classificar_trafego(877);
+select classificar_trafego(42);
+
+-- calcular valor da multa
+create or replace function calcular_multa(id_registro_input int)
+returns numeric(10,2) as $$
+declare
+valor_multa numeric(10,2);
+tipo_infracao_variavel tipo_infracao;
+gravidade_infracao_variavel gravidade_infracao;
+begin
+select infracao.tipo_infracao, infracao.gravidade_infracao into tipo_infracao_variavel, gravidade_infracao_variavel
+from registro_trafego inner join infracao on registro_trafego.id_registro = infracao.id_registro
+where registro_trafego.id_registro = id_registro_input;
+
+if not found then
+raise exception 'nao foi possivel calcular multa pois o id do registro não foi encontrado';
+end if;
+
+
+case
+    when tipo_infracao_variavel = 'EXCESSO DE VELOCIDADE' and gravidade_infracao_variavel = 'LEVE' then
+	    valor_multa = 130.16;
+	when tipo_infracao_variavel = 'EXCESSO DE VELOCIDADE' and gravidade_infracao_variavel = 'MEDIA' then
+	    valor_multa = 195.23;
+	when tipo_infracao_variavel = 'EXCESSO DE VELOCIDADE' and gravidade_infracao_variavel = 'GRAVE' then
+	    valor_multa = 880.41;
+	when tipo_infracao_variavel = 'AVANCO DE SINAL' then
+	    valor_multa = 293.47;
+    when tipo_infracao_variavel = 'DIRECAO PROIBIDA' and gravidade_infracao_variavel = 'LEVE'	then
+	    valor_multa = 88.38;
+    when tipo_infracao_variavel = 'DIRECAO PROIBIDA' and gravidade_infracao_variavel = 'MEDIA' then		   
+        valor_multa = 130.16;
+	 when tipo_infracao_variavel = 'DIRECAO PROIBIDA' and gravidade_infracao_variavel = 'GRAVE' then	
+	    valor_multa = 293.47;
+end case;
+
+return valor_multa;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Erro no calculo: %', SQLERRM;
+        RETURN false;
+end;
+$$ language plpgsql;
+
+select calcular_multa(1);
+select calcular_multa(3);
+select calcular_multa(5);
+
+create type relatorio_sensor as (
+media_velocidade velocidade_media,
+pico_trafego int,
+status_operacao status_sensor_trafego
+);
+
+-- Relatório de Sensor
+create or replace function gerar_relatorio_sensor(id_sensor_input int, data_inicio date, data_fim date)
+returns relatorio_sensor as $$
+declare
+media_velocidade_variavel velocidade_media;
+pico_trafego_variavel int;
+status_operacao_variavel status_sensor_trafego;
+begin
+select avg(r.velocidade_media), max(r.volume_veiculos), s.status_sensor
+into media_velocidade_variavel, pico_trafego_variavel, status_operacao_variavel
+from sensor_trafego s inner join registro_trafego r 
+on s.id_sensor = r.id_sensor
+where s.id_sensor = id_sensor_input and r.data_registro between data_inicio and data_fim
+group by s.status_sensor;
+
+if not found then
+raise exception 'nao foi possivel gerar relatorio pois o sensor nao foi encontrado |OU| nao tem registro entre as datas fornecidas';
+end if;
+
+return (media_velocidade_variavel, pico_trafego_variavel, status_operacao_variavel)::relatorio_sensor;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Erro no relatorio: %', SQLERRM;
+        RETURN false;
+
+end;
+$$ language plpgsql;
+
+select * from registro_trafego;
+
+select * from gerar_relatorio_sensor(2, '2025-04-25', '2025-05-22');
+select * from gerar_relatorio_sensor(6, '2025-04-30', '2025-05-21');
+select * from gerar_relatorio_sensor(7, '2023-04-10', '2023-05-08');
+
+create type comparacao_vias as (
+via_com_mais_infracões varchar(200),
+diferença_volume int,
+comparacao_velocidades int
+);
+
+drop type comparacao_vias;
+
+drop function comparar_vias;
+
+-- Análise Comparativa
+create or replace function comparar_vias(id_via_1 int, id_via_2 int)
+returns comparacao_vias as $$
+declare
+nome_via_variavel_1 varchar(200);
+diferença_volume_variavel int;
+comparacao_velocidades_variavel int;
+volume_veiculos_variavel_1 int;
+velocidade_media_variavel_1 int;
+maximo_infracoes_variavel_1 int;
+volume_veiculos_variavel_2 int;
+velocidade_media_variavel_2 int;
+maximo_infracoes_variavel_2 int;
+nome_via_variavel_2 varchar(200);
+begin
+select (v.dados_via).nome_via, max(i.id_infracao), sum(r.volume_veiculos), avg(r.velocidade_media)
+into nome_via_variavel_1, maximo_infracoes_variavel_1, volume_veiculos_variavel_1, velocidade_media_variavel_1
+from via_urbana v inner join sensor_trafego s on v.id_via = s.id_via
+inner join registro_trafego r on s.id_sensor = r.id_sensor
+inner join infracao i on r.id_registro = i.id_registro
+where v.id_via = id_via_1
+group by (v.dados_via).nome_via;
+
+select (v.dados_via).nome_via, max(i.id_infracao), sum(r.volume_veiculos), avg(r.velocidade_media)
+into nome_via_variavel_2, maximo_infracoes_variavel_2, volume_veiculos_variavel_2, velocidade_media_variavel_2
+from via_urbana v inner join sensor_trafego s on v.id_via = s.id_via
+inner join registro_trafego r on s.id_sensor = r.id_sensor
+inner join infracao i on r.id_registro = i.id_registro
+where v.id_via = id_via_2
+group by (v.dados_via).nome_via;
+
+if not found then
+raise exception 'nao foi possivel comparar as vias pois alguma das vias não foi encontrada';
+end if;
+
+if volume_veiculos_variavel_1 > volume_veiculos_variavel_2 then
+diferença_volume_variavel = volume_veiculos_variavel_1 - volume_veiculos_variavel_2;
+else
+diferença_volume_variavel = volume_veiculos_variavel_2 - volume_veiculos_variavel_1;
+end if;
+
+if velocidade_media_variavel_1 > velocidade_media_variavel_2 then
+comparacao_velocidades_variavel = velocidade_media_variavel_1 - velocidade_media_variavel_2;
+else
+comparacao_velocidades_variavel = velocidade_media_variavel_2 - velocidade_media_variavel_1;
+end if;
+
+case 
+   when maximo_infracoes_variavel_1 > maximo_infracoes_variavel_2 then
+     return (nome_via_variavel_1, diferença_volume_variavel, comparacao_velocidades_variavel)::comparacao_vias;
+   else	
+     return (nome_via_variavel_2, diferença_volume_variavel, comparacao_velocidades_variavel)::comparacao_vias;
+end case;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Erro na comparação: %', SQLERRM;
+        RETURN false;
+end; 
+$$ language plpgsql;
+
+select * from comparar_vias(2, 4);
+
+-- teste
+select (via_urbana.dados_via).nome_via, sum(registro_trafego.volume_veiculos), avg(registro_trafego.velocidade_media) from via_urbana inner join sensor_trafego on via_urbana.id_via = sensor_trafego.id_via
+inner join registro_trafego on sensor_trafego.id_sensor = registro_trafego.id_sensor
+inner join infracao on registro_trafego.id_registro = infracao.id_registro
+group by (via_urbana.dados_via).nome_via;
+
+create type alerta_trafego as (
+tipo_alerta tipo_alerta_transito,
+mensagem text,
+nivel_urgencia urgencia_alerta,
+data_hora_alerta timestamp,
+localizacao point
+);
+
+-- alerta de trafego
+create or replace function gerar_alerta_trafego(id_sensor_input int, volume_input int, infracoes_input int, velocidade_input int)
+returns alerta_trafego as $$
+declare
+status_sensor_variavel status_sensor_trafego;
+localizacao_variavel point;
+begin
+select s.status_sensor, s.localizacao into status_sensor_variavel, localizacao_variavel from sensor_trafego s
+where s.id_sensor = id_sensor_input;
+
+if not found then
+raise exception 'nao foi possivel gerar alerta pois o sensor nao foi encontrado';
+end if;
+
+if status_sensor_variavel <> 'ATIVO' then
+raise exception 'nao foi possivel gerar alerta pois o sensor nao esta ativo';
+end if;
+
+if volume_input <= 0 or velocidade_input <= 0 then
+raise exception 'nao é necessario gerar alerta pois não há veiculos na pista';
+end if;
+
+if infracoes_input <= 0 then
+raise exception 'não é necessario gerar alerta pois não há infracoes registrada';
+end if;
+
+case 
+  when volume_input <= 30 and infracoes_input >= 8 and velocidade_input <= 20 then
+    return ('ACIDENTE', 'cuidado a frente pois a um acidente registrado', 'ALTO', current_timestamp, localizacao_variavel)::alerta_trafego;
+  when volume_input <= 50 and infracoes_input >= 4 and velocidade_input <= 50 then
+    return ('CURVA PERIGOSA', 'cuidado a frente pois há uma curva perigosa na estrada', 'MEDIO', current_timestamp, localizacao_variavel)::alerta_trafego;
+  else
+    return ('DESCIDA INGREME', 'cuidado a frente pois há uma descida muito ingreme, risco de acidente', 'BAIXO', current_timestamp, localizacao_variavel)::alerta_trafego;
+end case;
+
+EXCEPTION
+    WHEN OTHERS THEN
+        RAISE EXCEPTION 'Erro na geração de alerta: %', SQLERRM;
+        RETURN false;
+end;
+$$ language plpgsql;
+
+select * from gerar_alerta_trafego(1, 15, 12, 17);
+select * from gerar_alerta_trafego(2, 36, 5, 45);
