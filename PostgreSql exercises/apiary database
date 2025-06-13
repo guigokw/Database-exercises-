@@ -1,0 +1,256 @@
+create database monitoramento_abelhas;
+
+create type estado_saude as enum('EXCELENTE', 'BOM', 'REGULAR', 'RUIM');
+
+create type tipo_abelha as enum('RAINHA', 'ZANGÃO', 'OPERÁRIA');
+
+create type tipo_mel as enum('MEL DE LARANJEIRA', 'EUCALIPTO', 'ACÁCIA');
+
+create type estresse_colonia as enum('BAIXO', 'MEDIO', 'ALTO');
+
+create domain percentual as smallint
+check (value between 0 and 100);
+
+create domain temperatura as smallint
+check (value between -25 and 50);
+
+drop domain temperatura;
+
+create type temperatura_saude as (
+temperatura_interna temperatura,
+temperatura_externa temperatura
+);
+
+create type localizaçao as (
+latitude point,
+longitude point
+);
+
+create type qualidade_mel as (
+quantidade_colida_em_kg int,
+tipo_mel tipo_mel,
+teor_de_agua percentual,
+teor_de_açucar percentual
+);
+
+create table colmeias (
+id_colmeia serial primary key,
+localizacao localizaçao,
+capacidade_maxima int,
+estado_saude estado_saude
+);
+
+create table abelhas (
+id_abelha serial primary key,
+id_colmeia int references colmeias(id_colmeia),
+tipo_abelha tipo_abelha
+);
+
+create table producao_mel (
+id_producao serial primary key,
+id_colmeia int references colmeias(id_colmeia),
+qualidade_mel qualidade_mel
+);
+
+alter table producao_mel add column data_coleta date; 
+
+create table monitoramento_saude (
+id_monitoramento serial primary key,
+id_colmeia int references colmeias(id_colmeia),
+data_hora_monitoramento timestamp,
+nivel_estresse estresse_colonia,
+temperaturas temperatura_saude
+);
+
+drop table colmeias;
+
+-- triggers
+
+-- 1 - atualização de estado de saúde
+create trigger atualizar_saude
+before insert on monitoramento_saude
+for each row
+execute procedure verificar_saude();
+
+create or replace function verificar_saude()
+returns trigger as $$
+declare
+qtd_baixo int;
+qtd_medio int;
+qtd_alto int;
+sum_temp_interna int;
+sum_temp_externa int;
+cont_temp_interna int;
+cont_temp_externa int;
+tot_temp_interna int;
+tot_temp_externa int;
+begin
+select sum((sub.temperaturas).temperatura_interna), 
+sum((sub.temperaturas).temperatura_externa),
+count(*) filter (where sub.nivel_estresse = 'BAIXO'),
+count(*) filter (where sub.nivel_estresse = 'MEDIO'),
+count(*) filter (where sub.nivel_estresse = 'ALTO')
+into sum_temp_interna, sum_temp_externa, qtd_baixo, qtd_medio, qtd_alto 
+from (
+select * from monitoramento_saude
+where id_colmeia = new.id_colmeia
+order by data_hora_monitoramento desc
+limit 3
+) sub;
+
+select count((sub.temperaturas).temperatura_interna), count((sub.temperaturas).temperatura_interna)
+into cont_temp_interna, cont_temp_externa
+from (
+select * from monitoramento_saude
+where id_colmeia = new.id_colmeia
+order by data_hora_monitoramento desc
+limit 3
+) sub;
+
+tot_temp_interna = sum_temp_interna / cont_temp_interna;
+tot_temp_externa = sum_temp_externa / cont_temp_externa;
+
+case
+     -- temperatura interna e externa entre 34 e 36 graus | nivel de estresse baixo maior que medio e alto | nivel de estresse medio maior que baixo e alto
+   when (tot_temp_interna between 34 and 36 and tot_temp_externa between 34 and 36 and (qtd_baixo > qtd_medio and qtd_baixo > qtd_alto) or (qtd_medio > qtd_alto and qtd_medio > qtd_baixo)) then
+     update colmeias set estado_saude = 'EXCELENTE' where id_colmeia = new.id_colmeia;
+	 -- tempertura interna e externa entre 34 e 36 graus |  nivel de estresse medio maior que baixo e alto | nivel de estresse baixo maior que medio e alto
+   when (tot_temp_interna between 25 and 33 and tot_temp_externa between 25 and 33 and (qtd_medio > qtd_alto and qtd_medio > qtd_baixo) or (qtd_baixo > qtd_medio and qtd_baixo > qtd_alto)) then
+     update colmeias set estado_saude = 'BOM' where id_colmeia = new.id_colmeia;
+	 -- temperatura interna e externa menor que 25 graus | nivel de estresse alto maior que baixo e medio
+   when (tot_temp_interna < 25 and tot_temp_externa < 25 and (qtd_alto > qtd_medio and qtd_alto > qtd_baixo)) then
+     update colmeias set estado_saude = 'RUIM' where id_colmeia = new.id_colmeia;
+	 -- temperatura interna e externa maior que 35 graus | nivel de estresse alto maior que baixo e medio
+   when (tot_temp_interna > 35 and tot_temp_externa > 35 and (qtd_alto > qtd_medio and qtd_alto > qtd_baixo)) then
+     update colmeias set estado_saude = 'RUIM' where id_colmeia = new.id_colmeia;
+	 -- quaisquer outras condições
+   else
+     update colmeias set estado_saude = 'REGULAR' where id_colmeia = new.id_colmeia;
+end case;
+
+return new;
+end;
+$$ language plpgsql;
+
+-- 2 - funcao que impede insercao de abelhas onde capacidade maxima ja foi atingida
+create trigger impedir_insercao
+before insert on abelhas
+for each row
+execute procedure verificar_capacidade_colmeia();
+
+create or replace function verificar_capacidade_colmeia()
+returns trigger as $$
+declare
+capacidade_abelhas int;
+quantidade_abelhas int;
+begin
+select colmeias.capacidade_maxima, count(abelhas.id_abelha) into capacidade_abelhas, quantidade_abelhas
+from colmeias inner join abelhas on colmeias.id_colmeia = abelhas.id_colmeia
+where colmeias.id_colmeia = new.id_colmeia
+group by colmeias.capacidade_maxima;
+
+if (quantidade_abelhas >= capacidade_abelhas) then
+  raise exception 'não é possivel fazer a insercao pois a colmeia ja atingiu sua capacidade maxima';
+end if;
+
+return new;
+end;
+$$ language plpgsql;
+
+-- 3 - Trigger para registrar alerta crítico automaticamente
+create trigger alerta_automatico
+after update on colmeias
+for each row
+execute procedure analisar_alerta();
+
+create or replace function analisar_alerta()
+returns trigger as $$
+begin
+if (new.estado_saude = 'RUIM') then
+insert into monitoramento_saude values
+(default, new.id_colmeia, current_timestamp, 'ALTO', (10,10));
+end if;
+return new;
+end;
+$$ language plpgsql;
+
+-- inserindo dados
+
+-- id_colmeia, (latitude, longitude), capacidade_maxima, estado_saude('EXCELENTE', 'BOM', 'REGULAR', 'RUIM')
+insert into colmeias values 
+(default, ('(125,720)', '(54,2554)'), 2, 'EXCELENTE'),
+(default, ('(14,266)', '(22,2222)'), 100, 'BOM');
+
+insert into colmeias values
+(default, ('(147,200)', '(21,9877)'), 48, 'REGULAR'),
+(default, ('(047,554)', '(45,884)'), 22, 'BOM');
+
+update colmeias set estado_saude = 'RUIM' where id_colmeia = 3;
+
+-- id_abelha, id_colmeia, tipo_abelha('RAINHA', 'ZANGÃO', 'OPERÁRIA')
+insert into abelhas values
+(default, 1, 'RAINHA'),
+(default, 1, 'ZANGÃO'),
+(default, 2, 'OPERÁRIA');
+
+insert into abelhas values
+(default, 2, 'RAINHA'),
+(default, 2, 'ZANGÃO'),
+(default, 2, 'OPERÁRIA');
+
+-- id_producao, id_colmeia, qualidade_mel(quantidade_colida_kg, tipo_mel('MEL DE LARANJEIRA', 'EUCALIPTO', 'ACÁCIA'), teor agua, teor açucar)
+insert into producao_mel values
+(default, 2, (24, ('EUCALIPTO'), 19, 81)),
+(default, 4, (51, ('MEL DE LARANJEIRA'), 14, 77)),
+(default, 2, (38, ('ACÁCIA'), 15, 72)),
+(default, 1, (5, ('ACÁCIA'), 18, 74)),
+(Default, 4, (48, ('MEL DE LARANJEIRA'), 16, 80)),
+(default, 2, (25, ('EUCALIPTO'), 18, 79));
+
+-- id_monitoramento, id_colmeia, data_hora_monitoramento, nivel_estresse('BAIXO', 'MEDIO', 'ALTO'), (temperatura_interna, temperatura externa)
+insert into monitoramento_saude values
+(default, 2, '2025-04-14', 'BAIXO', (35, 35));
+
+insert into monitoramento_saude values
+(default, 2, '2025-06-17', 'BAIXO', (34, 36)),
+(default, 2, '2025-06-22', 'BAIXO', (35, 35)),
+(default, 2, '2025-06-27', 'BAIXO', (36, 34));
+
+insert into monitoramento_saude values
+(default, 2, '2025-06-01', 'ALTO', (0,0));
+
+insert into monitoramento_saude values
+(default, 2, '2025-06-05', 'ALTO', (14,-2)),
+(default, 2, '2025-06-08', 'ALTO', (8,-5)),
+(default, 2, '2025-06-11', 'ALTO', (5,-10));
+
+drop table monitoramento_saude;
+
+select * from colmeias;
+select * from monitoramento_saude;
+select * from producao_mel;
+
+-- windows functions
+
+-- 1 - Calcular a produção acumulada de mel por colmeia ao longo do tempo
+select colmeias.id_colmeia, producao_mel.data_coleta, sum((producao_mel.qualidade_mel).quantidade_colida_em_kg) over(partition by colmeias.id_colmeia order by producao_mel.data_coleta) as quantidade_colida_ao_Longo_do_tempo
+from colmeias inner join producao_mel on colmeias.id_colmeia = producao_mel.id_colmeia
+group by colmeias.id_colmeia, producao_mel.data_coleta, (producao_mel.qualidade_mel).quantidade_colida_em_kg;
+
+-- 2 - Rankear colmeias por produtividade relativa (comparando com a média do apiário)
+with base as (
+  select colmeias.id_colmeia,
+  dense_rank() over (order by sum((producao_mel.qualidade_mel).quantidade_colida_em_kg) desc) as ranking
+  from colmeias inner join producao_mel on colmeias.id_colmeia = producao_mel.id_colmeia
+  group by colmeias.id_colmeia
+),
+valores_totais as (
+     select 
+	 colmeias.id_colmeia,
+	 sum((producao_mel.qualidade_mel).quantidade_colida_em_kg) as total_producao,
+     avg((producao_mel.qualidade_mel).quantidade_colida_em_kg) as media_apiario
+	 from producao_mel inner join colmeias on producao_mel.id_colmeia = colmeias.id_colmeia
+	 group by colmeias.id_colmeia
+)
+select base.id_colmeia, valores_totais.total_producao, valores_totais.media_apiario, base.ranking
+from base inner join valores_totais on base.id_colmeia = valores_totais.id_colmeia
