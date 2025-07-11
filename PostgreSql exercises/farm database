@@ -1,0 +1,561 @@
+create database fazenda;
+
+create type tipo_animal as enum('BOVINO', 'EQUINO', 'SUINO', 'OVINOS', 'CAPRINOS', 'AVES');
+
+create type tipo_plantacao as enum('SOJA', 'MILHO', 'TRIGO', 'CAFÉ');
+
+create type sexo_animal as enum('MACHO', 'FÊMEA');
+
+create type tipo_equipamento as enum('MAQUINARIO AGRICOLA', 'FERRAMENTA MANUAL');
+
+create type cargo_funcionario as enum('AGRICULTOR', 'PECUARISTA', 'OPERADOR DE MAQUINAS', 'ENGENHEIRO AGRONOMO', 'GERENTE DE FAZENDA');
+
+create type tipo_manutencao as enum('PREVENTIVA', 'CORRETIVA', 'PREDICTIVA');
+
+create type status_manutencao as enum('CONCLUIDA', 'PENDENTE', 'CANCELADA');
+
+create type tipo_racao as enum('PROTEICA', 'ENERGETICA', 'MINERAL', 'FIBROSA');
+
+create domain percentual_fazenda smallint
+check (value between 0 and 100);
+
+create domain peso_animal numeric(5,2)
+check (value between 3 and 510.00) 
+
+create domain quantidade_positiva int
+check (value > 0);
+
+create type localizacao_fazenda as (
+latitude point,
+longitude point
+);
+
+create table animal (
+id_animal serial primary key,
+nome_animal varchar(150),
+tipo_animal tipo_animal,
+data_nascimento date,
+sexo_animal sexo_animal,
+peso_animal peso_animal
+);
+
+create table plantacao (
+id_plantacao serial primary key,
+tipo_plantacao tipo_plantacao,
+area_hectares int,
+data_plantio date,
+coordenadas_local point
+);
+
+create table equipamento (
+id_equipamento serial primary key,
+nome_equipamento varchar(150),
+tipo_equipamento tipo_equipamento,
+data_aquisicao date,
+valor numeric(10,2),
+vida_util_anos smallint
+);
+
+create table funcionario_fazenda (
+id_funcionario serial primary key,
+nome_funcionario varchar(150),
+cargo_funcionario cargo_funcionario,
+salario numeric(6,2),
+data_contratacao date
+);
+
+create table producao_leite (
+id_leite serial primary key,
+id_animal int references animal(id_animal), -- criar trigger em que valida apenas animais que produzam leite, se nao lançar exceção
+data_producao_leite date,
+quantidade_litros int,
+gordura percentual_fazenda
+);
+
+alter table producao_leite alter column quantidade_litros type quantidade_positiva;
+
+create table producao_graos (
+id_grao serial primary key,
+id_plantacao int references plantacao(id_plantacao),
+data_colheita date,
+quantidade_kg int
+);
+
+alter table producao_graos alter column quantidade_kg type quantidade_positiva;
+
+create table manutencao_equipamento (
+id_manutencao serial primary key,
+id_equipamento int references equipamento(id_equipamento), 
+tipo_manutencao tipo_manutencao,
+status_manutencao status_manutencao,
+partes_afetadas text
+);
+
+alter table manutencao_equipamento add column data_manutencao date;
+
+drop table manutencao_equipamento;
+
+create table alimentacao_animal (
+id_alimentacao serial primary key,
+id_animal int references animal(id_animal),
+tipo_racao tipo_racao,
+horario_alimentacao timestamp,
+quantidade_fornecida quantidade_positiva,
+dieta_especial boolean
+);
+
+-- funcoes com e sem trigger
+
+-- funcao para validar producao de leite 
+
+create trigger validar_leite
+before insert on producao_leite
+for each row
+execute procedure analisar_leite();
+
+create or replace function analisar_leite()
+returns trigger as $$
+declare
+animais tipo_animal;
+sexo sexo_animal;
+litros int;
+begin
+select tipo_animal, sexo_animal into animais, sexo
+from animal 
+where id_animal = new.id_animal;
+
+if (animais = 'SUINO' or animais = 'AVES') then
+raise exception 'não foi possivel registrar a producao de leite pois o tipo de animal nao o produz para consumo humano';
+else 
+   if sexo = 'MACHO' then
+    raise exception 'não foi possivel registrar a producao de leite pois o animal relacionado é macho';
+  end if;
+end if;	
+
+litros := new.quantidade_litros; 
+
+if (litros <= 0) then
+  raise exception 'não foi possivel registrar a producao de leite pois a quantidade em litros esta menor que 0';
+end if;  
+
+return new;
+end;
+$$ language plpgsql;
+
+-- função que calcule a idade atual de um animal a partir de sua data de nascimento 
+drop function calcular_idade_animal(int);
+
+create or replace function calcular_idade_animal(animal_id int)
+returns text as $$
+declare
+data_nascimento_animal date;
+idade int;
+idade_animal text;
+begin
+select data_nascimento into data_nascimento_animal
+from animal
+where id_animal = animal_id;
+
+if not found then
+  raise exception 'não foi possivel calcular a idade do animal, pois ele não foi encontrado';
+end if;  
+  
+idade := extract(year from current_date) - extract(year from data_nascimento_animal);
+
+idade_animal := cast(idade as text);
+
+if (idade < 1) then
+  return 'esse animal tem apenas alguns meses de idade';
+else 
+  return 'esse animal tem ' || idade_animal || ' anos de idade';
+end if;
+end;
+$$ language plpgsql;
+
+select calcular_idade_animal(2);
+
+-- trigger que automaticamente registre uma manutenção padrão quando um novo equipamento é inserido
+create trigger registrar_manutencao
+after insert on equipamento
+for each row
+execute procedure analisar_insercao_equipamento()
+
+drop trigger registrar_manutencao on equipamento;
+
+create or replace function analisar_insercao_equipamento()
+returns trigger as $$
+begin
+insert into manutencao_equipamento values
+(default, new.id_equipamento, 'PREDICTIVA', 'CONCLUIDA', 'ferramenta toda' ,new.data_aquisicao);
+return new;
+end;
+$$ language plpgsql;
+
+-- função que retorne a produção total de leite de um animal em um período 
+create or replace function calcular_producao_leite(animal_id int, data_inicio date, data_fim date)
+returns int as $$
+declare
+leite_total int;
+animal_tipo tipo_animal;
+sexo sexo_animal;
+begin
+
+select tipo_animal, sexo_animal into animal_tipo, sexo
+from animal where id_animal = animal_id;
+
+if (animal_tipo = 'SUINO' or animal_tipo = 'AVES') then
+    raise exception 'não foi possivel calcular a produção de leite, pois o animal fornecido é um suino ou uma ave';
+end if;
+
+if (sexo = 'MACHO') then
+    raise exception 'não foi possivel calcular a producao de leite do animal fornecido pois ele é macho';
+end if;
+
+select sum(quantidade_litros) into leite_total
+from producao_leite
+where id_animal = animal_id
+and producao_leite.data_producao_leite between data_inicio and data_fim;
+
+return leite_total;
+end;
+$$ language plpgsql;
+
+select calcular_producao_leite(2, '2024-04-24', current_date);
+
+-- uma função que, dado um tipo de plantação, retorne a estimativa de colheita baseada na área e produtividade média
+create or replace function estimativa_colheita(plantacao_id int)
+returns numeric(10,2) as $$
+declare
+plantacao_tipo tipo_plantacao;
+area int;
+kg_media int;
+begin
+select plantacao.tipo_plantacao, plantacao.area_hectares, avg(producao_graos.quantidade_kg)
+into plantacao_tipo, area, kg_media
+from plantacao left join producao_graos on plantacao.id_plantacao = producao_graos.id_plantacao
+where plantacao.id_plantacao = plantacao_id
+group by plantacao.tipo_plantacao, plantacao.area_hectares;
+
+case
+  when (plantacao_tipo = 'SOJA') then
+    if (area between 0 and 3) then
+	   if (kg_media < 60) then
+	     return 54.5;
+	    elsif (kg_media < 120) then
+		 return 71.2;
+		else 
+		 return 99.87;
+	    end if;
+	elsif (area < 12) then
+	  if (kg_media < 150) then
+	    return 124.94;
+	  elsif (kg_media < 220) then
+	    return 181.1;
+	  else
+	    return 224;
+	  end if;
+	else
+	   if (kg_media < 250) then
+	    return 238.94;
+	  elsif (kg_media < 310) then
+	    return 291.1;
+	  else
+	    return 360;
+	  end if;
+	end if;
+  when (plantacao_tipo = 'MILHO') then
+    if (area between 0 and 3) then
+	   if (kg_media < 60) then
+	     return 41.80;
+	    elsif (kg_media < 105) then
+		 return 81.2;
+		else 
+		 return 109.87;
+	    end if;
+	elsif (area < 12) then
+	  if (kg_media < 165) then
+	    return 138.96;
+	  elsif (kg_media < 220) then
+	    return 194.12;
+	  else
+	    return 251;
+	  end if;
+	else
+	   if (kg_media < 280) then
+	    return 256.94;
+	  elsif (kg_media < 325) then
+	    return 301.1;
+	  else
+	    return 335;
+	  end if;
+	end if;
+  when (plantacao_tipo = 'TRIGO') then
+    if (area between 0 and 3) then
+	   if (kg_media < 60) then
+	     return 42.5;
+	    elsif (kg_media < 120) then
+		 return 77.2;
+		else 
+		 return 131.87;
+	    end if;
+	elsif (area < 12) then
+	  if (kg_media < 125) then
+	    return 101.94;
+	  elsif (kg_media < 180) then
+	    return 151.1;
+	  else
+	    return 203;
+	  end if;
+	else
+	   if (kg_media < 210) then
+	    return 178.94;
+	  elsif (kg_media < 280) then
+	    return 261.1;
+	  else
+	    return 305;
+	  end if;
+	end if;
+  when (plantacao_tipo = 'CAFÉ') then
+    if (area between 0 and 3) then
+	   if (kg_media < 60) then
+	     return 50.5;
+	    elsif (kg_media < 120) then
+		 return 84.2;
+		else 
+		 return 126.87;
+	    end if;
+	elsif (area < 12) then
+	  if (kg_media < 180) then
+	    return 144.94;
+	  elsif (kg_media < 235) then
+	    return 200.1;
+	  else
+	    return 241;
+	  end if;
+	else
+	   if (kg_media < 260) then
+	    return 248.94;
+	  elsif (kg_media < 320) then
+	    return 301.1;
+	  else
+	    return 370;
+	  end if;
+	end if;	
+  else
+    raise exception 'tipo de plantacao invalido';
+end case;
+end;
+$$ language plpgsql;
+
+select estimativa_colheita(2)
+
+-- trigger para garantir que a area nao seja menor que 0
+create trigger verificar_area
+before insert or update on plantacao
+for each row
+execute procedure analisar_area();
+
+create or replace function analisar_area()
+returns trigger as $$
+begin
+if new.area_hectares <= 0 then
+  raise exception 'não foi possivel inserir essa plantacao pois a area esta menor que 0';
+end if;
+
+return new;
+end;
+$$ language plpgsql;
+
+-- um trigger que atualize o peso médio por tipo e sexo de animal após cada inserção na tabela de alimentação
+create trigger atualizar_peso
+after insert or update on alimentacao_animal
+for each row
+execute procedure analisar_peso();
+
+create or replace function analisar_peso()
+returns trigger as $$
+declare
+tipo tipo_animal;
+sexo sexo_animal;
+begin
+select tipo_animal, sexo_animal into tipo, sexo
+from animal
+where id_animal = new.id_animal;
+
+case 
+  when (sexo = 'MACHO') then
+    if (tipo = 'BOVINO') then
+	  update animal set peso_animal = peso_animal + 1.25
+	  where id_animal = new.id_animal;
+	elsif (tipo = 'EQUINO') then
+	  update animal set peso_animal = peso_animal +  7
+	  where id_animal = new.id_animal;
+	elsif (tipo = 'SUINO') then
+	  update animal set peso_animal = peso_animal +  0.80
+	  where id_animal = new.id_animal;
+	elsif (tipo = 'OVINOS') then
+	  update animal set peso_animal = peso_animal +  0.20
+	  where id_animal = new.id_animal;
+	elsif (tipo = 'CAPRINOS') then
+	  update animal set peso_animal = peso_animal +  0.15
+	  where id_animal = new.id_animal;
+	else
+	  update animal set peso_animal = peso_animal +  0.6
+	  where id_animal = new.id_animal;
+	end if;
+ when (sexo = 'FÊMEA') then
+    if (tipo = 'BOVINO') then
+	  update animal set peso_animal = peso_animal +  1
+	  where id_animal = new.id_animal;
+	elsif (tipo = 'EQUINO') then
+	  update animal set peso_animal = peso_animal +  4.5
+	  where id_animal = new.id_animal;
+	elsif (tipo = 'SUINO') then
+	  update animal set peso_animal = peso_animal +  0.90
+	  where id_animal = new.id_animal;
+	elsif (tipo = 'OVINOS') then
+	  update animal set peso_animal = peso_animal +  0.40
+	  where id_animal = new.id_animal;
+	elsif (tipo = 'CAPRINOS') then
+	  update animal set peso_animal = peso_animal +  0.20
+	  where id_animal = new.id_animal;
+	else
+	  update animal set peso_animal = peso_animal +  0.12
+	  where id_animal = new.id_animal;	
+	end if;
+end case;
+
+return new;
+end;
+$$ language plpgsql;
+
+
+-- inserindo dados
+
+-- id_animal, nome_animal, tipo_animal(bovino, equino, suino, caprinos, ovinos, aves), data_nascimento, sexo_animal(macho, fêmea), peso_animal
+insert into animal values
+(default, 'mike', 'BOVINO', '2024-01-14', 'MACHO', 359.69);
+
+insert into animal values
+(default, 'jurema', 'EQUINO', '2023-07-17', 'FÊMEA', 400.99),
+(default, 'anastacia', 'SUINO', '2024-05-25', 'FÊMEA', 78.58);
+
+insert into animal values
+(default, 'pedroca', 'OVINOS', '2021-10-10', 'FÊMEA', 33);
+
+-- id_plantacao, tipo_plantacao('SOJA', 'MILHO', 'TRIGO', 'CAFÉ'), area_hectares, data_plantio, coordenadas
+insert into plantacao values
+(default, 'SOJA', 5, '2024-10-10', '(147,258)');
+
+insert into plantacao values
+(default, 'CAFÉ', 15, '2022-09-19', '(369,2588)'),
+(default, 'TRIGO', 8, '2023-05-13', '(4778,588)'),
+(default, 'CAFÉ', 19, '2025-01-06', '(555,224)');
+
+select * from animal
+
+-- id_equipamento, nome_equipamento, tipo_equipamento('MAQUINARIO AGRICOLA', 'FERRAMENTA MANUAL'), data_aquisição, valor, vida_util_anos
+insert into equipamento values
+(default, 'TRATOR', 'MAQUINARIO AGRICOLA', '2023-03-14', 20000, 13);
+
+insert into equipamento values
+(default, 'ENXADA', 'FERRAMENTA MANUAL', '2020-07-17', 900, 10),
+(default, 'SEMEADORAS', 'MAQUINARIO AGRICOLA', '2019-08-21', 17000, 15),
+(default, 'PULVERIZADOR', 'MAQUINARIO AGRICOLA', '2021-11-11', 14000, 8);
+
+insert into equipamento values
+(default, 'MAQUINA DE PREPARO DE SOLO', 'MAQUINARIO AGRICOLA', '2020-06-26', 16000, 10);
+
+select * from manutencao_equipamento;
+
+-- id_funcionario, nome_funcionario, cargo_funcionario('AGRICULTOR', 'PECUARISTA', 'OPERADOR DE MAQUINAS', 'ENGENHEIRO AGRONOMO', 'GERENTE DE FAZENDA'), salario, data_contratacao
+insert into funcionario_fazenda values
+(default, 'gabriel rocha', 'PECUARISTA', 2500, '2021-02-24'),
+(default, 'paulo lima', 'GERENTE DE FAZENDA', 4000, '2018-09-18'),
+(default, 'heitor ribeiro', 'OPERADOR DE MAQUINAS', 3200, '2019-05-22'),
+(default, 'Aleksander moreira', 'AGRICULTOR', 2200, '2021-03-01'),
+(default, 'kaique roma', 'AGRICULTOR', 2400, '2020-05-02');
+
+-- id_leite, id_animal, data_producao_leite, quantidade_Litros, gordura
+insert into producao_leite values
+(default, 2, '2025-04-24', 5, 11);
+
+insert into producao_leite values
+(default, 2, '2025-04-30', 11, 25),
+(default, 2, '2025-05-22', 8, 16);
+
+insert into producao_leite values
+(default, 4, '2025-06-19', 4, 6),
+(default, 2, '2025-06-22', 14, 30),
+(default, 4, '2025-07-01', 9, 16);
+
+insert into producao_leite values
+(default, 2, current_date, 20, 48);
+
+--id_grao, id_plantacao, data_colheita, quantidade_kg
+insert into producao_graos values
+(default, 3, '2024-04-17', 24),
+(default, 1, '2025-03-21', 54),
+(default, 4, '2025-05-28', 32),
+(default, 2, '2025-05-29', 36);
+
+insert into producao_graos values
+(default, 3, '2025-01-01', 24),
+(default, 4, '2025-02-26', 10),
+(default, 1, '2025-04-05', 13);
+
+select * from producao_graos;
+
+select * from plantacao;
+
+-- id_maniutencao, id_equipamento, tipo_manutencao('PREVENTIVA', 'CORRETIVA', 'PREDICTIVA'), Status_manutencao('CONCLUIDA', 'PENDENTE', 'CANCELADA'), partes afetadas, data_manutencao
+insert into manutencao_equipamento values
+(default, 6, 'CORRETIVA', 'PENDENTE', 'cabo da enxada', '2025-07-07'),
+(default, 7, 'PREVENTIVA', 'CONCLUIDA', 'embuchamento', '2025-05-21');
+
+select * from equipamento;
+
+-- id_alimentacao, id_animal, tipo_racao('PROTEICA', 'ENERGETICA', 'MINERAL', 'FIBROSA'), horario_alimentacao, quantidade_fornecida, dieta_especial
+insert into alimentacao_animal values
+(default, 1, 'PROTEICA', current_timestamp, 14, false);
+
+
+-- consultas
+
+-- Liste os 5 animais que mais produziram leite no último mês, ordenados por produção decrescente 
+select animal.nome_animal, animal.tipo_animal, sum(producao_leite.quantidade_litros) as litros_de_leite_produzido
+from animal inner join producao_leite on animal.id_animal = producao_leite.id_animal
+where producao_leite.data_producao_leite between current_date - interval '1 month' and current_date
+group by animal.nome_animal, animal.tipo_animal
+order by sum(producao_leite.quantidade_litros) desc
+limit 5;
+
+-- Calcule a produção média diária de leite por tipo de animal nos últimos 30 dias
+select animal.tipo_animal, producao_leite.data_producao_leite, avg(producao_leite.quantidade_litros) over(partition by animal.tipo_animal order by extract(day from producao_leite.data_producao_leite) desc) as media_diaria
+from animal inner join producao_leite on animal.id_animal = producao_leite.id_animal
+where producao_leite.data_producao_leite between current_date - interval '30 days' and current_date
+group by animal.tipo_animal, producao_leite.data_producao_leite, producao_leite.quantidade_litros
+
+-- 	Encontre os equipamentos que precisam de manutenção (não tiveram manutenção nos últimos 6 meses) 
+select equipamento.id_equipamento, equipamento.nome_equipamento, max(manutencao_equipamento.data_manutencao) as data_utlima_manutencao
+from equipamento left join manutencao_equipamento on equipamento.id_equipamento = manutencao_equipamento.id_equipamento
+group by equipamento.id_equipamento, equipamento.nome_equipamento
+having max(manutencao_equipamento.data_manutencao) is null
+or max(manutencao_equipamento.data_manutencao) < current_date - interval '6 months';
+
+-- Mostre a evolução mensal da produção de grãos por tipo de plantação no último ano 
+select plantacao.tipo_plantacao, extract(month from producao_graos.data_colheita), sum(producao_graos.quantidade_kg) over(partition by plantacao.tipo_plantacao order by extract(month from producao_graos.data_colheita) desc) as evolucao_mensal_colheita
+from plantacao inner join producao_graos on plantacao.id_plantacao = producao_graos.id_plantacao
+where producao_graos.data_colheita between current_date - interval '1 year' and current_date
+group by plantacao.tipo_plantacao, producao_graos.quantidade_kg, producao_graos.data_colheita;
+
+-- Calcule o custo total com salários por cargo, incluindo o percentual que cada cargo representa no total
+select funcionario_fazenda.cargo_funcionario, sum(funcionario_fazenda.salario) as custo_total, round((count(*) * 100.0 / sum(count(*)) over()), 2) as percentual_de_funcionarios
+from funcionario_fazenda
+group by funcionario_fazenda.cargo_funcionario;
+
+-- Mostre a produtividade (kg/hectare) de cada plantação, comparada com a média da fazenda
+select plantacao.id_plantacao, plantacao.tipo_plantacao, sum(producao_graos.quantidade_kg / plantacao.area_hectares) over(partition by plantacao.id_plantacao order by producao_graos.data_colheita desc) as quilogramas_produzidos_por_hectare,
+avg(producao_graos.quantidade_kg / plantacao.area_hectares) as media_da_fazenda
+from plantacao inner join producao_graos on plantacao.id_plantacao = producao_graos.id_plantacao
+group by plantacao.id_plantacao, plantacao.tipo_plantacao, producao_graos.quantidade_kg, plantacao.area_hectares, producao_graos.data_colheita
