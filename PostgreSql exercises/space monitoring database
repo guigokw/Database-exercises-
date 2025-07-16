@@ -1,0 +1,372 @@
+create database monitoramento_espacial;
+
+create type tipo_satelite as enum('COMUNICAÇÃO', 'OBSERVAÇÃO TERRA', 'METEOROLOGICO', 'CIENTIFICO')
+
+create type status_missao as enum('ATIVA', 'CONCLUIDA', 'FALHA', 'EM LANÇAMENTO');
+
+create type status_satelite as enum('ATIVO', 'INATIVO');
+
+create type tipo_planeta as enum('ROCHOSO', 'GASOSO', 'GELO', 'ANÕES');
+
+create type tipo_dado_observacao as enum('IMAGEM', 'ESPECTRO', 'TEMPERATURA');
+
+create type gravidade_alerta as enum('BAIXA', 'MEDIA', 'ALTA');
+
+create domain percentual_bateria smallint
+check (value between 0 and 100);
+
+create domain altitude_km int
+check (value > 0);
+
+create type coordenadas_espaciais as (
+latitude numeric(10,2),
+longitude numeric(10,2),
+altitude_km altitude_km
+);
+
+drop type coordenadas_espaciais;
+
+drop table orbita;
+drop table satelite;
+drop table planeta;
+drop table dados_observacao;
+drop table alerta_colisao;
+
+drop function calcular_distancia_satelite(int, int)
+
+create table satelite (
+id_satelite serial primary key,
+nome_satelite varchar(200),
+tipo_satelite tipo_satelite,
+data_lancamento date,
+vida_util_anos int,
+bateria percentual_bateria,
+status_satelite status_satelite
+);
+
+create table planeta (
+id_planeta serial primary key,
+nome_planeta varchar(200),
+tipo_planeta tipo_planeta,
+massa_kg numeric(10,4),
+diametro_km numeric(10,4)
+);
+
+alter table planeta alter column massa_kg type double precision;
+
+create table orbita (
+id_orbita serial primary key,
+id_satelite int references satelite(id_satelite),
+id_planeta int references planeta(id_planeta),
+coordenadas coordenadas_espaciais,
+velocidade_km numeric(10,4)
+);
+
+create table missao (
+id_missao serial primary key,
+nome_missao varchar(200),
+status_missao status_missao,
+data_inicio date,
+data_fim date,
+orcamento numeric(10,2)
+);
+
+create table dados_observacao (
+id_dado serial primary key,
+id_satelite int references satelite(id_satelite),
+id_planeta int references planeta(id_planeta),
+data_hora timestamp,
+tipo_dado tipo_dado_observacao,
+dados_brutos jsonb
+);
+
+alter table missao add column id_planeta int references planeta(id_planeta);
+
+alter table dados_observacao add column id_missao int references missao(id_missao);
+
+alter table dados_observacao drop column id_missao;
+
+create table alerta_colisao (
+id_alerta serial primary key,
+id_satelite_1 int references satelite(id_satelite),
+id_satelite_2 int references satelite(id_satelite),
+data_hora_alerta timestamp,
+distancia_km numeric(10,4),
+gravidade gravidade_alerta
+);
+
+-- funções
+
+-- funções sem trigger
+
+-- calcular a distancia entre dois satelites em km
+create or replace function calcular_distancia_satelite(satelite_id_1 int, satelite_id_2 int)
+returns numeric(10,2) as $$
+declare 
+existe boolean;
+existe2 boolean;
+distancia numeric(10,2);
+latitude_1 numeric(10,2);
+longitude_1 numeric(10,2);
+altitude_km_1 altitude_km;
+latitude_2 numeric(10,2);
+longitude_2 numeric(10,2);
+altitude_km_2 altitude_km;
+x_1 numeric(10,2);
+y_1 numeric(10,2);
+z_1 numeric(10,2);
+x_2 numeric(10,2);
+y_2 numeric(10,2);
+z_2 numeric(10,2);
+begin
+select exists (
+    select 1 from satelite
+	where id_satelite = satelite_id_1
+) into existe;
+
+select exists (
+    select 1 from satelite
+	where id_satelite = satelite_id_2
+) into existe2;
+
+if not existe then
+  raise exception 'não foi possivel calcular a distancia pois o satelite 1 fornecido não foi encontrado';
+end if;
+
+if not existe2 then
+   raise exception 'não foi possivel calcular  distancia pois o satelite 2 fornecido não foi encontrado';
+end if;   
+
+select (orbita.coordenadas).latitude, (orbita.coordenadas).longitude, (orbita.coordenadas).altitude_km into
+latitude_1, longitude_1, altitude_km_1
+from orbita where id_satelite = satelite_id_1;
+
+select (orbita.coordenadas).latitude, (orbita.coordenadas).longitude, (orbita.coordenadas).altitude_km
+into latitude_2, longitude_2, altitude_km_2
+from orbita where id_satelite = satelite_id_2;
+
+x_1 = (6371 + altitude_km_1) * cos(radians(latitude_1)) * cos(radians(longitude_1));
+
+y_1 = (6371 + altitude_km_1) * cos(radians(latitude_1)) * sin(radians(longitude_1));
+
+z_1 = (6371 + altitude_km_1) * sin(radians(latitude_1));
+
+x_2 = (6371 + altitude_km_2) * cos(radians(latitude_2)) * cos(radians(longitude_2));
+
+y_2 = (6371 + altitude_km_2) * cos(radians(latitude_2)) * sin(radians(longitude_2));
+
+z_2 = (6371 + altitude_km_2) * sin(radians(latitude_2));
+
+distancia = sqrt(pow(x_2 - x_1, 2) + pow(y_2 - y_1, 2) + pow(z_2 - z_1, 2));
+
+return distancia;
+end;
+$$ language plpgsql;
+
+select calcular_distancia_satelite(1, 2);
+
+drop function calcular_bateria_restante(int);
+
+-- calcular tempo restante de bateria de um satelite especifico
+create or replace function calcular_bateria_restante(satelite_id int)
+returns numeric(10,2) as $$
+declare
+bateria_usada numeric(10,2);
+bateria_restante numeric(10,2);
+consumo_diario numeric(10,2);
+dias_totais numeric(10,2);
+dias numeric(10,2);
+existe boolean;
+dias_restantes numeric(10,2);
+begin
+select exists (
+   select 1 from satelite
+   where id_satelite = satelite_id
+) into existe;
+
+if not existe then
+  raise exception 'não foi possivel calcular o tempo restante de bateria, pois o satelite não foi encontrado';
+end if;
+
+select bateria, extract(epoch from age(current_date::date, data_lancamento::date)) / 86400 into bateria_restante, dias
+from satelite
+where id_satelite = satelite_id;
+
+bateria_usada := 100 - bateria_restante;
+
+consumo_diario := bateria_usada / dias;
+
+dias_totais = 100 / consumo_diario;
+
+dias_restantes = dias_totais - dias;
+
+return dias_restantes;
+end;
+$$ language plpgsql;
+
+select calcular_bateria_restante(1);
+
+-- verificar se os satelites tem risco de colisão - resolvi inserir os dados de alerta de colisão aqui pois nao consgeui achar uma maneira de fazer isso com trigger
+create or replace function verificar_risco_colisao(satelite_1 int, satelite_2 int)
+returns text as $$
+declare
+distancia int;
+begin
+distancia := calcular_distancia_satelite(satelite_1, satelite_2);
+
+if (distancia < 50) then
+  return 'os satelite estao correndo risco de colisão';
+  insert into alerta_colisao values
+  (default, satelite_1, satelite_2, current_timestamp, distancia, 'ALTA');
+else 
+  return 'não há risco de colisão no momento';
+end if;
+end;
+$$ language plpgsql;
+
+select verificar_risco_colisao(1,2)
+
+-- funcoes com trigger
+
+-- atualizar status do satelite
+drop trigger atualizar_status on satelite
+
+create trigger atualizar_status
+before insert or update on satelite
+for each row
+execute procedure verificar_bateria();
+
+create or replace function verificar_bateria()
+returns trigger as $$
+begin
+if (new.bateria < 5) then
+  new.status_satelite = 'INATIVO';
+end if;
+
+return new;
+end;
+$$ language plpgsql;
+
+-- validar a data da missao espacial
+create trigger validar_data
+before insert or update on missao
+for each row 
+execute procedure verificar_data();
+
+create or replace function verificar_data()
+returns trigger as $$
+begin
+if (new.data_fim <= new.data_inicio) then
+  raise exception 'não foi possivel validar a missão pois a data de fim da missao foi registrada como antes da data de inicio';
+end if;
+return new;
+end;
+$$ language plpgsql;
+
+-- validar lançamento do satelite
+create trigger validar_lancamento
+before insert or update on satelite
+for each row
+execute procedure verificar_lancamento();
+
+create or replace function verificar_lancamento()
+returns trigger as $$
+begin
+if (new.data_lancamento > current_date and new.status_satelite = 'ATIVO') then
+  raise exception 'não foi possivel realizar o lancamento do satelite, pois a data de lancamernto esta marcada para uma data futura e o status foi classificado como ativo, neccessario alteração';
+end if;
+return new;
+end;
+$$ language plpgsql;
+
+-- bloquear dados de observacao de planeta desativado
+create trigger bloquear_insercao
+before insert or update on dados_observacao
+for each row
+execute procedure bloquear_dados_planeta_desativado();
+
+create or replace function bloquear_dados_planeta_desativado()
+returns trigger as $$
+declare
+missao_status status_missao;
+begin
+select missao.status_missao into missao_status
+from missao inner join planeta on missao.id_planeta = planeta.id_planeta
+where planeta.id_planeta = new.id_planeta;
+
+if (missao_status = 'CONCLUIDA' or missao_status = 'FALHA') then
+  raise exception 'a insercao de dados foi bloquaeada foi essa missao ja foi registrada como concluida ou como uma falha';
+end if;
+
+return new;
+end;
+$$ language plpgsql;
+
+
+-- id_satelite, nome_satelite, tipo_satelite('COMUNICAÇÃO', 'OBSERVAÇÃO TERRA', 'METEOROLOGICO', 'CIENTIFICO'), data_lançamento, vida_util_anos, bateria_percentual, status_satelite('ATIVO', 'INATIVO')
+insert into satelite values
+(default, '32 bot', 'METEOROLOGICO', '2021-05-28', 60, 79, 'ATIVO'),
+(default, '4546b', 'COMUNICAÇÃO', '2022-07-17', 81, 85, 'ATIVO');
+
+insert into satelite values
+(default, 'bug boy', 'OBSERVAÇÃO TERRA', '2023-03-21', 6, 4, 'ATIVO');
+
+insert into satelite values
+(default, 'g mission', 'COMUNICAÇÃO', '2025-08-21', 15, 100, 'ATIVO');
+
+delete from satelite where id_satelite = 6;
+
+select * from satelite;
+
+-- id_planeta, nome_planeta, tipo_planeta('ROCHOSO', 'GASOSO', 'GELO', 'ANÕES'), massa_kg, diametro_km
+insert into planeta values
+(default, 'MARTE', 'ROCHOSO', 639.1023, 6.779),
+(default, 'JUPITER', 'GASOSO', 1898.1027, 139.820);
+
+-- id_orbita, id_satelite, id_planeta, coordenadas(latitude, longitude, altura_km), velocidade_km
+insert into orbita values 
+(default, 1, 2, (1.385, 6.58, 588), 256),
+(default, 2, 1, (151.18, 141.58, 690), 120);
+
+-- id_missao, nome_missao, status_missao('ATIVA', 'CONCLUIDA', 'FALHA', 'EM LANÇAMENTO'), data_inicio, data_fim, orcamento
+insert into missao values
+(default, 'conquest', 'ATIVA', '2023-03-16', '2025-02-08', 258887);
+
+insert into missao values
+(default, 'viltrum', 'CONCLUIDA', '2025-04-14', '2025-12-12', 256998);
+
+select * from missao;
+
+-- id_dado, id_satelite, id_planeta, data_hora, tipo_dado('IMAGEM', 'ESPECTRO', 'TEMPERATURA'), dados_brutos
+insert into dados_observacao values
+(default, 2, 1, current_timestamp, 'IMAGEM', '{"resolução": "4K",
+                                           "formato": "JPEG",
+										    "tamanho bytes": 369887,
+											"filtros": "infravermelho"}');
+
+-- consultas
+
+-- Satélites ativos com bateria crítica (< 10%) e suas missões.
+select satelite.nome_satelite, satelite.bateria, missao.nome_missao from satelite
+left join orbita on satelite.id_satelite = orbita.id_satelite
+left join planeta on orbita.id_planeta = planeta.id_planeta
+left join missao on planeta.id_planeta = missao.id_missao
+where satelite.bateria < 10 and satelite.status_satelite = 'ATIVO';
+
+select * from satelite
+
+-- Planetas com mais dados coletados
+select planeta.nome_planeta, count(dados_observacao.id_dado) as dados_coletados
+from planeta inner join dados_observacao on planeta.id_planeta = dados_observacao.id_planeta
+group by planeta.nome_planeta
+order by count(dados_observacao.id_dado) desc;
+
+-- Média de velocidade orbital por tipo de satélite
+select satelite.tipo_satelite, avg(orbita.velocidade_km) as media_velocidade
+from satelite inner join orbita on satelite.id_satelite = orbita.id_satelite
+group by satelite.tipo_satelite;
+
+-- Ranking de satélites por tempo em órbita 
+select satelite.nome_satelite, rank() over(order by satelite.data_lancamento) as ranking_tempo_orbita
+from satelite 
+group by satelite.nome_satelite, satelite.id_satelite, satelite.data_lancamento;
